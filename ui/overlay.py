@@ -303,7 +303,9 @@ class OverlayWidget(QWidget):
                 + 0.18 * math.sin(self._phase * 1.9)
             )
         else:
-            drive = self._level
+            # Gentle idle pulse so bars animate while waiting for speech
+            idle_pulse = 0.10 * abs(math.sin(self._phase * 1.1))
+            drive = max(self._level, idle_pulse)
 
         p.setPen(Qt.PenStyle.NoPen)
         for i in range(n):

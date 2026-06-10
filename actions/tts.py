@@ -63,7 +63,6 @@ async def speak(text: str, voice: str = "en-GB-SoniaNeural", engine: str = "edge
     if not text:
         return
 
-    _ui("state", "speaking")
     try:
         if engine == "edge-tts":
             try:
@@ -72,6 +71,7 @@ async def speak(text: str, voice: str = "en-GB-SoniaNeural", engine: str = "edge
             except Exception as e:
                 log.warning("edge-tts failed: %s — falling back to pyttsx3", e)
 
+        _ui("state", "speaking")
         await asyncio.to_thread(_speak_pyttsx3, text)
     finally:
         _ui("state", "idle")
@@ -87,6 +87,7 @@ async def _speak_edge_tts(text: str, voice: str):
     try:
         communicate = edge_tts.Communicate(text, voice)
         await communicate.save(tmp_path)
+        _ui("state", "speaking")   # set state right before audio starts
         await asyncio.to_thread(_play_mp3, tmp_path)
     finally:
         try:
