@@ -14,6 +14,7 @@ class OllamaClient:
         self._model = settings.ollama_model
         self._max_tool_calls = settings.max_tool_calls_per_turn
         self._client = ollama.Client(host=settings.ollama_host)
+        self._inactivity_s = getattr(settings, "ollama_inactivity_timeout_s", 45.0)
 
     async def complete(
         self,
@@ -133,6 +134,7 @@ class OllamaClient:
         """
         Stream one conversation turn through a thread→queue bridge.
         Yields content chunks; appends any tool calls to tool_calls_out.
+        Raises asyncio.TimeoutError if no chunk arrives within inactivity_s.
         """
         loop = asyncio.get_running_loop()
         chunk_q: asyncio.Queue = asyncio.Queue()
@@ -154,7 +156,14 @@ class OllamaClient:
         threading.Thread(target=_run, daemon=True).start()
 
         while True:
-            item = await chunk_q.get()
+            try:
+                item = await asyncio.wait_for(chunk_q.get(), timeout=self._inactivity_s)
+            except asyncio.TimeoutError:
+                log.warning(
+                    "Ollama produced no output for %.0fs — aborting stream",
+                    self._inactivity_s,
+                )
+                raise
             if item is None:
                 break
             if isinstance(item, Exception):
