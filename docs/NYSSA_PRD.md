@@ -638,15 +638,16 @@ elevenlabs>=1.0.0   # premium TTS
 - [x] Vision context in Ollama call (pass image bytes in user message)
 - **Milestone:** AI remembers facts across sessions; sees screen when asked ✅
 
-### Phase 3 — Full perception (week 3)
-- [ ] Wake word detection in MicCapture (substring match on transcript)
-- [ ] App-based mic suppression in Gatekeeper (game/media → suppress unless hotkey)
-- [ ] System audio level monitoring for suppression
-- [ ] Full app classification rules + `game_processes.json`
-- [ ] `send_keys_to_window` for background injection
-- [ ] `run_shell` with voice confirmation flow
-- [ ] `browser_navigate` + `browser_click` via Playwright
-- **Milestone:** Hands-free, game-aware, safe shell execution
+### Phase 3 — Full perception ✅ COMPLETE
+- [x] Wake word detection in MicCapture (energy VAD + Whisper substring match)
+- [x] App-based mic suppression in Gatekeeper (game/media → suppress unless hotkey)
+- [ ] System audio level monitoring for suppression (deferred to Phase 4)
+- [x] Full app classification rules + `game_processes.json`
+- [x] `send_keys_to_window` for background injection (PostMessage)
+- [x] `run_shell` with voice confirmation flow
+- [x] `open_url`, `read_clipboard`, `write_clipboard`, `remember_fact` tools
+- [ ] `browser_navigate` + `browser_click` via Playwright (deferred to Phase 4)
+- **Milestone:** Hands-free, game-aware, safe shell execution ✅
 
 ### Phase 4 — Polish (week 4)
 - [ ] Streaming TTS (sentence-by-sentence)
