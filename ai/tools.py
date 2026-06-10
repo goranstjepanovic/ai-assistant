@@ -199,9 +199,12 @@ TOOLS = [
         "function": {
             "name": "enroll_voice",
             "description": (
-                "Record and learn a speaker's voice so Nyssa can identify who is speaking. "
-                "Call this when the user says 'learn my voice', 'remember my voice', "
-                "'enroll my voice', or similar. Ask for their name first if not known."
+                "Record and learn a speaker's voice so Nyssa can identify who is speaking in future. "
+                "Call this ONLY when the user explicitly asks to enroll or teach their voice — "
+                "e.g. 'learn my voice', 'remember my voice', 'enroll my voice', 'add my voice profile'. "
+                "Do NOT call this when the user asks whether you know them, asks who they are, "
+                "or when the speaker is simply unidentified. "
+                "Ask for their name first if not provided."
             ),
             "parameters": {
                 "type": "object",

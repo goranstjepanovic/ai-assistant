@@ -6,7 +6,7 @@ import numpy as np
 log = logging.getLogger(__name__)
 
 _SAMPLE_RATE = 16000
-_DEFAULT_THRESHOLD = 0.72
+_DEFAULT_THRESHOLD = 0.65
 
 
 class SpeakerIdentifier:
@@ -22,8 +22,8 @@ class SpeakerIdentifier:
         if self._encoder is not None:
             return
         from resemblyzer import VoiceEncoder
-        self._encoder = VoiceEncoder()
-        log.info("Speaker encoder loaded")
+        self._encoder = VoiceEncoder(device="cpu")
+        log.info("Speaker encoder loaded (CPU)")
 
     def _ensure_profiles(self):
         if self._loaded:
@@ -60,10 +60,10 @@ class SpeakerIdentifier:
                     best_score, best_name = score, name
 
         if best_score >= self._threshold:
-            log.debug("Speaker identified: %s (%.2f)", best_name, best_score)
+            log.info("Speaker identified: %s (score=%.3f)", best_name, best_score)
             return best_name, best_score
 
-        log.debug("Speaker unknown (best=%.2f threshold=%.2f)", best_score, self._threshold)
+        log.info("Speaker unknown (best=%s score=%.3f threshold=%.2f)", best_name, best_score, self._threshold)
         return None
 
     def enroll(self, name: str, audio_samples: list[np.ndarray]) -> bool:
