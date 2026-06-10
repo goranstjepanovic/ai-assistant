@@ -2,12 +2,38 @@ import asyncio
 import logging
 import os
 import queue
+import re
 import tempfile
 from typing import Optional
 
 log = logging.getLogger(__name__)
 
 _pygame_ready = False
+
+
+def _strip_markdown(text: str) -> str:
+    # Code fences — drop the whole block, it won't make sense spoken
+    text = re.sub(r"```[\s\S]*?```", "", text)
+    # Inline code — keep the content
+    text = re.sub(r"`([^`]+)`", r"\1", text)
+    # Headers — keep the text, drop the # symbols
+    text = re.sub(r"^#{1,6}\s+", "", text, flags=re.MULTILINE)
+    # Bold/italic (***,  **, *, ___, __, _)
+    text = re.sub(r"\*{1,3}([^*\n]+)\*{1,3}", r"\1", text)
+    text = re.sub(r"_{1,3}([^_\n]+)_{1,3}", r"\1", text)
+    # Links — keep the label, drop the URL
+    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+    # Bullet / numbered list markers
+    text = re.sub(r"^\s*[-*+]\s+", "", text, flags=re.MULTILINE)
+    text = re.sub(r"^\s*\d+\.\s+", "", text, flags=re.MULTILINE)
+    # Blockquotes
+    text = re.sub(r"^\s*>\s*", "", text, flags=re.MULTILINE)
+    # Horizontal rules
+    text = re.sub(r"^[-*_]{3,}\s*$", "", text, flags=re.MULTILINE)
+    # Collapse leftover whitespace
+    text = re.sub(r"\n+", " ", text)
+    text = re.sub(r" {2,}", " ", text)
+    return text.strip()
 _ui_queue: Optional[queue.Queue] = None
 
 
@@ -33,7 +59,8 @@ def _ensure_pygame():
 
 
 async def speak(text: str, voice: str = "en-GB-SoniaNeural", engine: str = "edge-tts"):
-    if not text or not text.strip():
+    text = _strip_markdown(text)
+    if not text:
         return
 
     _ui("state", "speaking")
