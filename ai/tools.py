@@ -65,7 +65,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "open_url",
-            "description": "Open a URL in the default browser.",
+            "description": "Open a URL in the user's default browser (no further interaction possible).",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -73,6 +73,103 @@ TOOLS = [
                 },
                 "required": ["url"],
             },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "browser_navigate",
+            "description": (
+                "Navigate a controlled browser window to a URL. "
+                "Use this instead of open_url when you need to interact with the page "
+                "afterwards (click, read content, fill forms). "
+                "The browser window is visible to the user."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string", "description": "Full URL to navigate to"},
+                },
+                "required": ["url"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "browser_click",
+            "description": (
+                "Click an element on the current browser page. "
+                "Prefer 'text' to click by visible label (e.g. a button labelled 'Submit'). "
+                "Use 'selector' for CSS selectors when text is ambiguous."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text": {
+                        "type": "string",
+                        "description": "Visible text of the element to click, e.g. 'Sign in', 'Search'",
+                    },
+                    "selector": {
+                        "type": "string",
+                        "description": "CSS selector, e.g. '#submit-btn', 'input[type=submit]'",
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "browser_get_text",
+            "description": (
+                "Return the visible text content of the current browser page. "
+                "Use this after navigating to read articles, search results, or page data."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "max_chars": {
+                        "type": "integer",
+                        "description": "Maximum characters to return (default 4000)",
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "browser_fill",
+            "description": (
+                "Type text into an input field on the current browser page. "
+                "Clears the field first, then fills it. "
+                "Use for search boxes, login fields, and form inputs."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "selector": {
+                        "type": "string",
+                        "description": "CSS selector of the input field, e.g. 'input[name=q]', '#email'",
+                    },
+                    "value": {
+                        "type": "string",
+                        "description": "Text to fill into the field",
+                    },
+                },
+                "required": ["selector", "value"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "browser_close",
+            "description": "Close the controlled browser window and end the browser session.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
         },
     },
     {

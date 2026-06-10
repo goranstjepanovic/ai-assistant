@@ -82,6 +82,29 @@ class ActionRunner:
         if tool_name == "open_url":
             return await _open_url(tool_input["url"])
 
+        if tool_name == "browser_navigate":
+            from actions import browser as _browser
+            return await _browser.navigate(tool_input["url"])
+
+        if tool_name == "browser_click":
+            from actions import browser as _browser
+            return await _browser.click(
+                selector=tool_input.get("selector", ""),
+                text=tool_input.get("text", ""),
+            )
+
+        if tool_name == "browser_get_text":
+            from actions import browser as _browser
+            return await _browser.get_text(tool_input.get("max_chars", 4000))
+
+        if tool_name == "browser_fill":
+            from actions import browser as _browser
+            return await _browser.fill(tool_input["selector"], tool_input["value"])
+
+        if tool_name == "browser_close":
+            from actions import browser as _browser
+            return await _browser.close()
+
         if tool_name == "read_clipboard":
             from actions import clipboard
             return await clipboard.read_async()
