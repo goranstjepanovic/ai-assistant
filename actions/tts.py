@@ -82,6 +82,110 @@ def _split_sentences(text: str) -> list[str]:
     return [p.strip() for p in parts if p.strip()]
 
 
+async def speak_stream(
+    chunk_gen,
+    voice: str = "en-GB-SoniaNeural",
+    engine: str = "edge-tts",
+) -> str:
+    """
+    Consume an async generator of text chunks, pipeline sentences to TTS.
+
+    Sentences are synthesized as soon as they arrive; the player waits for
+    each audio to finish before starting the next — like a playlist that
+    forms while it plays.  Returns the full response text.
+    """
+    global _speaking
+    _stop_event.clear()
+    _speaking = True
+    try:
+        if engine == "edge-tts":
+            try:
+                return await _speak_stream_pipeline(chunk_gen, voice)
+            except Exception as e:
+                log.warning("edge-tts streaming failed: %s — falling back to pyttsx3", e)
+                # chunk_gen already exhausted at this point; fall through
+                return ""
+        else:
+            parts: list[str] = []
+            async for chunk in chunk_gen:
+                parts.append(chunk)
+            text = _strip_markdown("".join(parts))
+            if text:
+                _ui("state", "speaking")
+                await asyncio.to_thread(_speak_pyttsx3, text)
+            return text
+    finally:
+        _speaking = False
+        _ui("state", "idle")
+
+
+async def _speak_stream_pipeline(chunk_gen, voice: str) -> str:
+    """
+    Producer: collects chunks → sentences → kicks off synthesis tasks.
+    Player:   awaits each task in order → plays → moves to next.
+    Both run concurrently via asyncio.gather.
+    """
+    synth_q: asyncio.Queue = asyncio.Queue()  # asyncio.Task | None
+    text_parts: list[str] = []
+
+    async def producer():
+        buf = ""
+        async for chunk in chunk_gen:
+            if _stop_event.is_set():
+                break
+            text_parts.append(chunk)
+            buf += chunk
+            # Flush any complete sentences
+            while True:
+                m = re.search(r"(?<=[.!?])\s+", buf)
+                if not m:
+                    break
+                sentence = _strip_markdown(buf[: m.end()])
+                buf = buf[m.end():]
+                if sentence:
+                    await synth_q.put(asyncio.create_task(_synthesize(sentence, voice)))
+        # Flush remainder
+        if buf.strip() and not _stop_event.is_set():
+            sentence = _strip_markdown(buf)
+            if sentence:
+                await synth_q.put(asyncio.create_task(_synthesize(sentence, voice)))
+        await synth_q.put(None)  # sentinel — playlist is complete
+
+    async def player():
+        _ui("state", "speaking")
+        while True:
+            item = await synth_q.get()
+            if item is None:
+                break  # playlist finished
+            try:
+                path = await item  # wait for this track to be ready
+            except Exception as e:
+                log.warning("Synthesis failed: %s", e)
+                continue
+            await asyncio.to_thread(_play_mp3, path)  # play; blocks until done
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+            if _stop_event.is_set():
+                # Drain and cancel any remaining queued tracks
+                while True:
+                    try:
+                        remaining = synth_q.get_nowait()
+                        if remaining is not None:
+                            remaining.cancel()
+                            try:
+                                await remaining
+                            except (asyncio.CancelledError, Exception):
+                                pass
+                    except asyncio.QueueEmpty:
+                        break
+                break
+
+    await asyncio.gather(producer(), player())
+    return _strip_markdown("".join(text_parts))
+
+
 async def speak(text: str, voice: str = "en-GB-SoniaNeural", engine: str = "edge-tts"):
     global _speaking
     text = _strip_markdown(text)

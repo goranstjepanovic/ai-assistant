@@ -80,33 +80,46 @@ class Orchestrator:
         messages = recent_turns + [user_message]
 
         timeout = self._settings.api_timeout_s
+        voice = self._settings.tts_voice
+        engine = self._settings.tts_engine
+        follow_up_s = getattr(self._settings, "follow_up_window_s", 0.0)
+
+        response = ""
+        await self._bus.publish("tts_start", TtsStartEvent())
         try:
             response = await asyncio.wait_for(
-                self._claude.complete(messages, system, self._action_runner.dispatch),
+                tts.speak_stream(
+                    self._claude.stream_complete(
+                        messages, system, self._action_runner.dispatch
+                    ),
+                    voice,
+                    engine,
+                ),
                 timeout=timeout,
             )
         except asyncio.TimeoutError:
             response = "I didn't get a response in time. Please try again."
             log.warning("Ollama timed out after %ss", timeout)
+            tts.stop()
+            await tts.speak(response, voice, engine)
         except Exception as e:
             response = "Something went wrong. Please try again."
             log.exception("Orchestrator error: %s", e)
+            await tts.speak(response, voice, engine)
+        finally:
+            await self._bus.publish("follow_up", FollowUpEvent(duration_s=follow_up_s))
+
+        if not response:
+            return
 
         log.info("Nyssa: %r", response[:120])
 
         turn_id = f"turn_{time.time()}"
-        chunk = f"User: {event.text[:200]}\nNyssa: {response[:200]}"
+        mem_chunk = f"User: {event.text[:200]}\nNyssa: {response[:200]}"
         asyncio.create_task(asyncio.to_thread(self._memory.write_turn, "user", event.text, app_context))
         asyncio.create_task(asyncio.to_thread(self._memory.write_turn, "assistant", response, app_context))
-        asyncio.create_task(asyncio.to_thread(self._memory.add_chunk, turn_id, chunk))
+        asyncio.create_task(asyncio.to_thread(self._memory.add_chunk, turn_id, mem_chunk))
 
         asyncio.create_task(
             extract_and_store(event.text, response, self._claude, self._memory, source=turn_id)
         )
-
-        follow_up_s = getattr(self._settings, "follow_up_window_s", 0.0)
-        await self._bus.publish("tts_start", TtsStartEvent())
-        try:
-            await tts.speak(response, self._settings.tts_voice, self._settings.tts_engine)
-        finally:
-            await self._bus.publish("follow_up", FollowUpEvent(duration_s=follow_up_s))
