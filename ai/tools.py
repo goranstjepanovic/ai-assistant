@@ -3,6 +3,42 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "list_apps",
+            "description": (
+                "Return a list of installed applications from the Start Menu. "
+                "Call this when the user asks to open an app and you're unsure of the exact name."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "open_app",
+            "description": (
+                "Open an installed application by name. "
+                "Uses fuzzy matching so 'chrome', 'Google Chrome', or 'Chrome' all work. "
+                "If unsure of the name, call list_apps first."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "The application name, e.g. 'Spotify', 'Chrome', 'VS Code'",
+                    },
+                },
+                "required": ["name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "type_text",
             "description": "Type text into the currently active window as if typed on the keyboard.",
             "parameters": {

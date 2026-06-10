@@ -4,6 +4,7 @@ import time
 from pathlib import Path
 
 from actions import keyboard
+from actions import apps as apps_module
 
 log = logging.getLogger(__name__)
 
@@ -28,7 +29,11 @@ def _log_call(tool_name: str, tool_input: dict, result: str):
 async def dispatch(tool_name: str, tool_input: dict) -> str:
     result: str
     try:
-        if tool_name == "type_text":
+        if tool_name == "list_apps":
+            result = await apps_module.list_apps_async()
+        elif tool_name == "open_app":
+            result = await apps_module.open_app_async(tool_input["name"])
+        elif tool_name == "type_text":
             result = await keyboard.type_text(tool_input["text"])
         elif tool_name == "press_key":
             result = await keyboard.press_key(tool_input["key"])
