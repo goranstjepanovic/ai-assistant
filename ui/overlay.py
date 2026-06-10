@@ -35,27 +35,28 @@ def _load_symbol_pixmap(path: str) -> QPixmap | None:
     if not path:
         return None
     import logging
-    try:
-        from PIL import Image, ImageOps
-        import io
-        img = Image.open(path).convert("RGBA")
-        # Build alpha from inverse luminosity: dark pixels → opaque, white → transparent.
-        # Original colors are preserved so the logo displays as-is.
-        lum = img.convert("L")
-        alpha = ImageOps.invert(lum)
-        img.putalpha(alpha)
-        buf = io.BytesIO()
-        img.save(buf, format="PNG")
-        px = QPixmap()
-        px.loadFromData(buf.getvalue())
-        if px.isNull():
-            logging.getLogger(__name__).warning("Could not load symbol image: %s", path)
-            return None
-        return px
-    except Exception as exc:
-        logging.getLogger(__name__).warning("Symbol image load failed (%s): %s — falling back to Qt loader", path, exc)
-        px = QPixmap(path)
-        return None if px.isNull() else px
+    px = QPixmap(path)
+    if px.isNull():
+        logging.getLogger(__name__).warning("Could not load symbol image: %s", path)
+        return None
+    # If the image already has transparency, use it as-is.
+    # Only attempt white-background removal for fully-opaque images (e.g. JPEG or PNG without alpha).
+    if not px.hasAlphaChannel():
+        try:
+            from PIL import Image, ImageOps
+            import io
+            img = Image.open(path).convert("RGBA")
+            lum = img.convert("L")
+            img.putalpha(ImageOps.invert(lum))
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            px2 = QPixmap()
+            px2.loadFromData(buf.getvalue())
+            if not px2.isNull():
+                return px2
+        except Exception as exc:
+            logging.getLogger(__name__).warning("White-bg removal failed for %s: %s", path, exc)
+    return px
 
 
 class OverlayWidget(QWidget):
