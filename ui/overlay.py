@@ -31,6 +31,9 @@ def _c(rgb: tuple, alpha: int) -> QColor:
     return QColor(rgb[0], rgb[1], rgb[2], max(0, min(255, alpha)))
 
 
+_SYMBOL_RENDER_SIZE = 256   # pre-scale once at startup; draw time just blits
+
+
 def _load_symbol_pixmap(path: str) -> QPixmap | None:
     if not path:
         return None
@@ -39,24 +42,28 @@ def _load_symbol_pixmap(path: str) -> QPixmap | None:
     if px.isNull():
         logging.getLogger(__name__).warning("Could not load symbol image: %s", path)
         return None
-    # If the image already has transparency, use it as-is.
-    # Only attempt white-background removal for fully-opaque images (e.g. JPEG or PNG without alpha).
+    # If the image has no alpha channel (flat JPEG / opaque PNG) try to remove
+    # the white background via Pillow luminosity inversion.
     if not px.hasAlphaChannel():
         try:
             from PIL import Image, ImageOps
             import io
             img = Image.open(path).convert("RGBA")
-            lum = img.convert("L")
-            img.putalpha(ImageOps.invert(lum))
+            img.putalpha(ImageOps.invert(img.convert("L")))
             buf = io.BytesIO()
             img.save(buf, format="PNG")
             px2 = QPixmap()
             px2.loadFromData(buf.getvalue())
             if not px2.isNull():
-                return px2
+                px = px2
         except Exception as exc:
             logging.getLogger(__name__).warning("White-bg removal failed for %s: %s", path, exc)
-    return px
+    # Pre-scale once with Qt's smooth transform so draw-time blits stay crisp.
+    return px.scaled(
+        _SYMBOL_RENDER_SIZE, _SYMBOL_RENDER_SIZE,
+        Qt.AspectRatioMode.KeepAspectRatio,
+        Qt.TransformationMode.SmoothTransformation,
+    )
 
 
 class OverlayWidget(QWidget):
@@ -211,10 +218,11 @@ class OverlayWidget(QWidget):
 
     def _draw_symbol_image(self, p: QPainter, cx: float, cy: float,
                            size: float, color: QColor):
-        p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        sz = int(round(size * 2))
+        x  = int(round(cx - size))
+        y  = int(round(cy - size))
         p.setOpacity(color.alphaF())
-        p.drawPixmap(QRectF(cx - size, cy - size, size * 2, size * 2),
-                     self._symbol_pixmap, QRectF(self._symbol_pixmap.rect()))
+        p.drawPixmap(x, y, sz, sz, self._symbol_pixmap)
         p.setOpacity(1.0)
 
     def _draw_symbol_trident(self, p: QPainter, cx: float, cy: float,
