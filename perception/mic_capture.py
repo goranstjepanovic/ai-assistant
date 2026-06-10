@@ -15,9 +15,14 @@ log = logging.getLogger(__name__)
 SAMPLE_RATE = 16000
 MIN_AUDIO_SECONDS = 0.3
 
+# Always-on wake word listener tuning
+_WW_CHUNK_SECS = 0.1
+_WW_SPEECH_RMS = 0.015       # energy threshold to classify as speech
+_WW_SILENCE_END = 15         # chunks of silence to end a segment (~1.5 s)
+_WW_MAX_SECS = 8.0           # hard cap per segment
+
 
 def _parse_hotkey(hotkey_str: str) -> tuple[list[str], str]:
-    """Split 'alt_r+space' into (['alt_r'], 'space'). Single key → ([], 'key')."""
     parts = [p.strip().lower() for p in hotkey_str.split("+")]
     return parts[:-1], parts[-1]
 
@@ -30,11 +35,14 @@ class MicCapture:
         self._held: set[str] = set()
         self._device = settings.mic_device_index
         self._model = None
+        self._model_lock = threading.Lock()
         self._recording = False
         self._audio_chunks: list[np.ndarray] = []
         self._stream: Optional[sd.InputStream] = None
         self._transcribing = False
         self._ui_queue = ui_queue
+
+    # ── Model loading ─────────────────────────────────────────────────────────
 
     def _load_model(self):
         if self._model is not None:
@@ -48,6 +56,17 @@ class MicCapture:
             log.warning("CUDA unavailable (%s), falling back to CPU", e)
             self._model = WhisperModel(model_size, device="cpu", compute_type="int8")
             log.info("Whisper '%s' loaded on CPU", model_size)
+
+    # ── UI helper ─────────────────────────────────────────────────────────────
+
+    def _ui(self, kind: str, value):
+        if self._ui_queue is not None:
+            try:
+                self._ui_queue.put_nowait((kind, value))
+            except Exception:
+                pass
+
+    # ── Hotkey push-to-talk ───────────────────────────────────────────────────
 
     def _key_name(self, key) -> str:
         from pynput.keyboard import Key, KeyCode
@@ -72,13 +91,6 @@ class MicCapture:
             self._stop_and_transcribe()
         self._held.discard(name)
 
-    def _ui(self, kind: str, value):
-        if self._ui_queue is not None:
-            try:
-                self._ui_queue.put_nowait((kind, value))
-            except Exception:
-                pass
-
     def _start_recording(self):
         self._recording = True
         self._audio_chunks = []
@@ -93,11 +105,8 @@ class MicCapture:
                 self._ui("level", rms)
 
         self._stream = sd.InputStream(
-            samplerate=SAMPLE_RATE,
-            channels=1,
-            dtype="float32",
-            device=self._device,
-            callback=_callback,
+            samplerate=SAMPLE_RATE, channels=1, dtype="float32",
+            device=self._device, callback=_callback,
         )
         self._stream.start()
 
@@ -131,13 +140,11 @@ class MicCapture:
                 self._ui("state", "idle")
                 return
 
-            segments, info = self._model.transcribe(
-                audio,
-                language="en",
-                beam_size=5,
-                vad_filter=True,
-            )
-            text = " ".join(s.text for s in segments).strip()
+            with self._model_lock:
+                segments, info = self._model.transcribe(
+                    audio, language="en", beam_size=5, vad_filter=True,
+                )
+                text = " ".join(s.text for s in segments).strip()
 
             if not text:
                 log.debug("Empty transcription")
@@ -158,8 +165,107 @@ class MicCapture:
         finally:
             self._transcribing = False
 
+    # ── Always-on wake word listener ──────────────────────────────────────────
+
+    def _check_wakeword(self, audio: np.ndarray, wake: str):
+        if len(audio) < SAMPLE_RATE * 0.5:
+            return
+        self._load_model()
+        with self._model_lock:
+            segments, _ = self._model.transcribe(
+                audio, language="en", beam_size=3, vad_filter=True,
+            )
+            text = " ".join(s.text for s in segments).strip().lower()
+
+        if not text:
+            return
+
+        log.debug("Wake word check: %r", text)
+        idx = text.find(wake)
+        if idx == -1:
+            return
+
+        command = text[idx + len(wake):].strip(" ,.")
+        if not command:
+            log.debug("Wake word detected but no command followed")
+            return
+
+        log.info("Wake word: command = %r", command)
+        event = SpeechEvent(
+            text=command,
+            timestamp=time.time(),
+            confidence=0.8,
+            hotkey_triggered=False,
+        )
+        self._bus.publish_threadsafe("speech", event)
+
+    async def _run_wakeword_listener(self):
+        wake = self._settings.wake_word.lower().strip()
+        chunk_size = int(SAMPLE_RATE * _WW_CHUNK_SECS)
+
+        raw_q: queue.Queue = queue.Queue(maxsize=200)
+
+        def _cb(indata, frames, time_info, status):
+            if not self._recording:
+                try:
+                    raw_q.put_nowait(indata.copy())
+                except queue.Full:
+                    pass
+
+        stream = sd.InputStream(
+            samplerate=SAMPLE_RATE, channels=1, dtype="float32",
+            device=self._device, callback=_cb, blocksize=chunk_size,
+        )
+        stream.start()
+        log.info("Wake word listener active — say %r to activate", self._settings.wake_word)
+
+        segment: list[np.ndarray] = []
+        silence_count = 0
+        in_speech = False
+
+        try:
+            while True:
+                # Drain queue without blocking the event loop
+                drained = []
+                while True:
+                    try:
+                        drained.append(raw_q.get_nowait())
+                    except queue.Empty:
+                        break
+
+                if not drained:
+                    await asyncio.sleep(_WW_CHUNK_SECS)
+                    continue
+
+                for chunk in drained:
+                    rms = float(np.sqrt(np.mean(chunk ** 2)))
+
+                    if rms >= _WW_SPEECH_RMS:
+                        segment.append(chunk)
+                        silence_count = 0
+                        in_speech = True
+                    elif in_speech:
+                        segment.append(chunk)
+                        silence_count += 1
+
+                        total_secs = len(segment) * _WW_CHUNK_SECS
+                        if silence_count >= _WW_SILENCE_END or total_secs >= _WW_MAX_SECS:
+                            audio = np.concatenate(segment, axis=0).flatten()
+                            segment = []
+                            silence_count = 0
+                            in_speech = False
+                            asyncio.create_task(
+                                asyncio.to_thread(self._check_wakeword, audio, wake)
+                            )
+        finally:
+            stream.stop()
+            stream.close()
+
+    # ── Main entry point ──────────────────────────────────────────────────────
+
     async def run(self):
         from pynput import keyboard as kb
+
         combo = "+".join(self._modifiers + [self._trigger]).upper()
         log.info("MicCapture started — hold [%s] to speak", combo)
         log.info("Loading Whisper model in background...")
@@ -168,7 +274,12 @@ class MicCapture:
         listener = kb.Listener(on_press=self._on_press, on_release=self._on_release)
         listener.start()
         try:
-            while True:
-                await asyncio.sleep(1)
+            wake = self._settings.wake_word.strip() if hasattr(self._settings, "wake_word") else ""
+            if wake:
+                await self._run_wakeword_listener()
+            else:
+                log.info("Wake word disabled — push-to-talk only")
+                while True:
+                    await asyncio.sleep(1)
         finally:
             listener.stop()
