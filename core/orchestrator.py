@@ -66,7 +66,8 @@ class Orchestrator:
             try:
                 resize = tuple(self._settings.screenshot_resize)
                 quality = self._settings.screenshot_quality
-                screenshot = await asyncio.to_thread(capture_now, resize, quality)
+                monitor = getattr(self._settings, "screen_capture_monitor", -1)
+                screenshot = await asyncio.to_thread(capture_now, resize, quality, monitor)
                 user_message["images"] = [screenshot]
                 screenshot_attached = True
                 log.info("Screenshot attached (%d KB)", len(screenshot) // 1024)

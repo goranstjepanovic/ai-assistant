@@ -13,6 +13,7 @@ DEFAULTS = {
     "tts_engine": "edge-tts",
     "audio_output_device": None,
     "screen_capture_backend": "mss",
+    "screen_capture_monitor": -1,
     "screenshot_resize": [1280, 720],
     "screenshot_quality": 75,
     "window_poll_interval_ms": 500,
