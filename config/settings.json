@@ -1,0 +1,28 @@
+{
+  "assistant_name": "Nyssa",
+  "wake_word": "hey",
+  "hotkey": "space",
+  "mic_device_index": null,
+  "whisper_model": "small",
+  "vad_threshold": 0.7,
+  "tts_voice": "en-GB-SoniaNeural",
+  "tts_engine": "edge-tts",
+  "audio_output_device": null,
+  "screen_capture_backend": "mss",
+  "screenshot_resize": [
+    1280,
+    720
+  ],
+  "screenshot_quality": 75,
+  "window_poll_interval_ms": 500,
+  "activation_cooldown_s": 1.5,
+  "system_audio_suppress_threshold": 0.6,
+  "memory_recent_turns": 10,
+  "memory_semantic_k": 5,
+  "max_tool_calls_per_turn": 10,
+  "ollama_model": "gemma4",
+  "ollama_host": "http://localhost:11434",
+  "api_timeout_s": 60.0,
+  "log_level": "INFO",
+  "log_dir": "logs"
+}

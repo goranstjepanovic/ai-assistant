@@ -1,0 +1,11 @@
+logs/
+__pycache__/
+data/
+*.pyc
+*.pyo
+.env
+=*
+memory/chroma/
+memory/*.db
+memory/*.db-shm
+memory/*.db-wal
