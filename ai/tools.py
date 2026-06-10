@@ -197,6 +197,27 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "enroll_voice",
+            "description": (
+                "Record and learn a speaker's voice so Nyssa can identify who is speaking. "
+                "Call this when the user says 'learn my voice', 'remember my voice', "
+                "'enroll my voice', or similar. Ask for their name first if not known."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "Name to associate with this voice, e.g. 'Goran'",
+                    },
+                },
+                "required": ["name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "remember_fact",
             "description": (
                 "Store a persistent fact or preference about the user for future reference. "

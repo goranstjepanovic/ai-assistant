@@ -28,6 +28,7 @@ DEFAULTS = {
     "ollama_host": "http://localhost:11434",
     "api_timeout_s": 300.0,
     "ollama_inactivity_timeout_s": 45.0,
+    "speaker_id_threshold": 0.72,
     "memory_db_path": "memory/nyssa.db",
     "memory_chroma_path": "memory/chroma",
     "log_level": "INFO",

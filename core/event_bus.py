@@ -10,6 +10,7 @@ class SpeechEvent:
     timestamp: float
     confidence: float
     hotkey_triggered: bool = True
+    speaker: str | None = None
 
 
 @dataclass

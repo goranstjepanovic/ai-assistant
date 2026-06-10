@@ -161,6 +161,14 @@ class MicCapture:
         else:
             self._ui("state", "idle")
 
+    def _identify_speaker(self, audio: np.ndarray) -> str | None:
+        from perception import speaker_id as _speaker_id
+        sid = _speaker_id.get_instance()
+        if sid is None:
+            return None
+        result = sid.identify(audio)
+        return result[0] if result else None
+
     def _transcribe(self, chunks: list[np.ndarray]):
         if self._transcribing:
             log.debug("Already transcribing, skipping")
@@ -175,6 +183,8 @@ class MicCapture:
                 self._ui("state", "idle")
                 return
 
+            speaker = self._identify_speaker(audio)
+
             with self._model_lock:
                 segments, info = self._model.transcribe(
                     audio, language="en", beam_size=5, vad_filter=True,
@@ -186,12 +196,13 @@ class MicCapture:
                 self._ui("state", "idle")
                 return
 
-            log.info("Transcribed: %r (lang=%.0f%%)", text, info.language_probability * 100)
+            log.info("Transcribed: %r (lang=%.0f%%) speaker=%s", text, info.language_probability * 100, speaker)
             event = SpeechEvent(
                 text=text,
                 timestamp=time.time(),
                 confidence=info.language_probability,
                 hotkey_triggered=True,
+                speaker=speaker,
             )
             self._bus.publish_threadsafe("speech", event)
         except Exception:
@@ -250,6 +261,7 @@ class MicCapture:
         if len(audio) < SAMPLE_RATE * MIN_AUDIO_SECONDS:
             return
         self._load_model()
+        speaker = self._identify_speaker(audio)
         with self._model_lock:
             segments, info = self._model.transcribe(
                 audio, language="en", beam_size=5, vad_filter=True,
@@ -257,12 +269,13 @@ class MicCapture:
             text = " ".join(s.text for s in segments).strip()
         if not text:
             return
-        log.info("Follow-up heard: %r", text)
+        log.info("Follow-up heard: %r speaker=%s", text, speaker)
         event = SpeechEvent(
             text=text,
             timestamp=time.time(),
             confidence=info.language_probability,
             hotkey_triggered=False,
+            speaker=speaker,
         )
         self._bus.publish_threadsafe("speech", event)
 

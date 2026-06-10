@@ -8,6 +8,7 @@ def build_system_prompt(
     relevant_memories: list[str] | None = None,
     relationship_facts: list[str] | None = None,
     has_screenshot: bool = False,
+    speaker: str | None = None,
 ) -> str:
     name = settings.assistant_name
 
@@ -45,6 +46,7 @@ Current context:
 - Active app: {app_info}
 - Time: {ts}
 - Screen capture: {"attached — examine the image" if has_screenshot else "not attached this turn"}
+- Speaker: {speaker if speaker else "unidentified"}
 {relationship_section}{memory_section}{screenshot_note}
 Personality:
 You are Nyssa. Royal by nature, loyal by choice. You speak with calm authority — never hurried, \

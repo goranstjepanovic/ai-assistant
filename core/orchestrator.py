@@ -29,8 +29,11 @@ class Orchestrator:
         bus.subscribe("speech", self._queue)
 
     async def run(self):
-        asyncio.create_task(asyncio.to_thread(self._memory.initialize))
-        log.info("Orchestrator ready (memory initializing in background)")
+        await asyncio.to_thread(self._memory.initialize)
+        from perception import speaker_id as _speaker_id
+        threshold = getattr(self._settings, "speaker_id_threshold", 0.72)
+        _speaker_id.init(self._memory, threshold)
+        log.info("Orchestrator ready")
         while True:
             event: SpeechEvent = await self._queue.get()
             asyncio.create_task(self._handle(event))
@@ -76,7 +79,11 @@ class Orchestrator:
             except Exception:
                 log.exception("Screen capture failed — continuing without screenshot")
 
-        system = build_system_prompt(window, self._settings, relevant, relationship, has_screenshot=screenshot_attached)
+        system = build_system_prompt(
+            window, self._settings, relevant, relationship,
+            has_screenshot=screenshot_attached,
+            speaker=event.speaker,
+        )
 
         messages = recent_turns + [user_message]
 

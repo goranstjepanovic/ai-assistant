@@ -52,6 +52,11 @@ class MemoryManager:
                 updated_at  REAL NOT NULL
             );
             CREATE UNIQUE INDEX IF NOT EXISTS idx_facts_key ON facts(key);
+            CREATE TABLE IF NOT EXISTS speakers (
+                name        TEXT PRIMARY KEY,
+                embedding   BLOB NOT NULL,
+                enrolled_at REAL NOT NULL
+            );
         """)
         self._conn.commit()
 
@@ -67,6 +72,29 @@ class MemoryManager:
         )
 
     # ── Reads ─────────────────────────────────────────────────────────────────
+
+    def save_speaker(self, name: str, embedding) -> None:
+        import numpy as np
+        with self._lock:
+            blob = np.asarray(embedding, dtype=np.float32).tobytes()
+            self._conn.execute(
+                """INSERT INTO speakers (name, embedding, enrolled_at) VALUES (?,?,?)
+                   ON CONFLICT(name) DO UPDATE SET
+                       embedding=excluded.embedding,
+                       enrolled_at=excluded.enrolled_at""",
+                (name, blob, time.time()),
+            )
+            self._conn.commit()
+
+    def get_speakers(self) -> dict:
+        import numpy as np
+        if not self._ready:
+            return {}
+        rows = self._conn.execute("SELECT name, embedding FROM speakers").fetchall()
+        return {
+            r["name"]: np.frombuffer(r["embedding"], dtype=np.float32).copy()
+            for r in rows
+        }
 
     def get_relationship_facts(self, limit: int = 12) -> list[str]:
         """Return the most recently updated relationship signals (rel_* keys)."""

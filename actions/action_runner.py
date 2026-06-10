@@ -113,6 +113,10 @@ class ActionRunner:
             from actions import clipboard
             return await clipboard.write_async(tool_input["text"])
 
+        if tool_name == "enroll_voice":
+            from actions import enroll as _enroll
+            return await _enroll.enroll_speaker(tool_input["name"], self._settings)
+
         if tool_name == "remember_fact":
             if self._memory:
                 await asyncio.to_thread(
