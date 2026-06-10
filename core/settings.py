@@ -42,6 +42,41 @@ class Settings:
             setattr(self, key, value)
 
 
+_VALIDATIONS = [
+    # (field, type_or_types, extra_check, hint)
+    ("wake_word",               str,         None,                   "must be a non-empty string, e.g. 'hey nyssa'"),
+    ("hotkey",                  str,         None,                   "must be a key name, e.g. 'alt_r' or 'ctrl+shift+n'"),
+    ("whisper_model",           str,         lambda v: v in ("tiny","base","small","medium","large","large-v2","large-v3"),
+                                                                     "must be one of: tiny, base, small, medium, large, large-v2, large-v3"),
+    ("activation_cooldown_s",   (int,float), lambda v: v >= 0,      "must be a non-negative number"),
+    ("follow_up_window_s",      (int,float), lambda v: v >= 0,      "must be a non-negative number"),
+    ("memory_recent_turns",     int,         lambda v: v > 0,       "must be a positive integer"),
+    ("memory_semantic_k",       int,         lambda v: v > 0,       "must be a positive integer"),
+    ("max_tool_calls_per_turn", int,         lambda v: v > 0,       "must be a positive integer"),
+    ("api_timeout_s",           (int,float), lambda v: v > 0,       "must be a positive number"),
+    ("screenshot_quality",      int,         lambda v: 1 <= v <= 95,"must be between 1 and 95"),
+    ("tts_engine",              str,         lambda v: v in ("edge-tts","pyttsx3"),
+                                                                     "must be 'edge-tts' or 'pyttsx3'"),
+    ("ollama_host",             str,         lambda v: v.startswith("http"),
+                                                                     "must be a URL, e.g. 'http://localhost:11434'"),
+]
+
+
+def validate_settings(settings: "Settings") -> list[str]:
+    errors = []
+    for field, types, check, hint in _VALIDATIONS:
+        val = getattr(settings, field, None)
+        if val is None:
+            errors.append(f"  {field}: missing — {hint}")
+            continue
+        if not isinstance(val, types):
+            errors.append(f"  {field}: expected {types}, got {type(val).__name__} — {hint}")
+            continue
+        if check and not check(val):
+            errors.append(f"  {field}: invalid value {val!r} — {hint}")
+    return errors
+
+
 def load_settings() -> Settings:
     CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     if CONFIG_PATH.exists():
@@ -53,4 +88,11 @@ def load_settings() -> Settings:
         with open(CONFIG_PATH, "w") as f:
             json.dump(merged, f, indent=2)
         print(f"Created default config at {CONFIG_PATH}")
-    return Settings(merged)
+
+    settings = Settings(merged)
+    errors = validate_settings(settings)
+    if errors:
+        print("Config validation warnings:")
+        for e in errors:
+            print(e)
+    return settings

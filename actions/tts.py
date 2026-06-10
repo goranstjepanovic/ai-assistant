@@ -4,11 +4,51 @@ import os
 import queue
 import re
 import tempfile
+import threading
 from typing import Optional
 
 log = logging.getLogger(__name__)
 
 _pygame_ready = False
+_ui_queue: Optional[queue.Queue] = None
+_stop_event = threading.Event()
+_speaking = False
+
+
+def set_ui_queue(q: Optional[queue.Queue]):
+    global _ui_queue
+    _ui_queue = q
+
+
+def _ui(kind: str, value):
+    if _ui_queue is not None:
+        try:
+            _ui_queue.put_nowait((kind, value))
+        except Exception:
+            pass
+
+
+def is_speaking() -> bool:
+    return _speaking
+
+
+def stop():
+    """Interrupt any in-progress speech immediately."""
+    _stop_event.set()
+    try:
+        import pygame
+        if _pygame_ready:
+            pygame.mixer.music.stop()
+    except Exception:
+        pass
+
+
+def _ensure_pygame():
+    global _pygame_ready
+    if not _pygame_ready:
+        import pygame
+        pygame.mixer.init()
+        _pygame_ready = True
 
 
 def _strip_markdown(text: str) -> str:
@@ -34,39 +74,26 @@ def _strip_markdown(text: str) -> str:
     text = re.sub(r"\n+", " ", text)
     text = re.sub(r" {2,}", " ", text)
     return text.strip()
-_ui_queue: Optional[queue.Queue] = None
 
 
-def set_ui_queue(q: Optional[queue.Queue]):
-    global _ui_queue
-    _ui_queue = q
-
-
-def _ui(kind: str, value):
-    if _ui_queue is not None:
-        try:
-            _ui_queue.put_nowait((kind, value))
-        except Exception:
-            pass
-
-
-def _ensure_pygame():
-    global _pygame_ready
-    if not _pygame_ready:
-        import pygame
-        pygame.mixer.init()
-        _pygame_ready = True
+def _split_sentences(text: str) -> list[str]:
+    # Split at sentence-ending punctuation followed by whitespace
+    parts = re.split(r"(?<=[.!?])\s+", text)
+    return [p.strip() for p in parts if p.strip()]
 
 
 async def speak(text: str, voice: str = "en-GB-SoniaNeural", engine: str = "edge-tts"):
+    global _speaking
     text = _strip_markdown(text)
     if not text:
         return
 
+    _stop_event.clear()
+    _speaking = True
     try:
         if engine == "edge-tts":
             try:
-                await _speak_edge_tts(text, voice)
+                await _speak_edge_tts_pipelined(text, voice)
                 return
             except Exception as e:
                 log.warning("edge-tts failed: %s — falling back to pyttsx3", e)
@@ -74,26 +101,70 @@ async def speak(text: str, voice: str = "en-GB-SoniaNeural", engine: str = "edge
         _ui("state", "speaking")
         await asyncio.to_thread(_speak_pyttsx3, text)
     finally:
+        _speaking = False
         _ui("state", "idle")
 
 
-async def _speak_edge_tts(text: str, voice: str):
+async def _synthesize(text: str, voice: str) -> str:
+    """Synthesize one sentence to a temp MP3, return path."""
     import edge_tts
-
     tmp = tempfile.NamedTemporaryFile(suffix=".mp3", delete=False)
-    tmp_path = tmp.name
+    path = tmp.name
     tmp.close()
+    await edge_tts.Communicate(text, voice).save(path)
+    return path
 
-    try:
-        communicate = edge_tts.Communicate(text, voice)
-        await communicate.save(tmp_path)
-        _ui("state", "speaking")   # set state right before audio starts
-        await asyncio.to_thread(_play_mp3, tmp_path)
-    finally:
+
+async def _speak_edge_tts_pipelined(text: str, voice: str):
+    """
+    Sentence pipeline: while sentence N is playing, sentence N+1 is being
+    synthesized — so time-to-first-audio equals one sentence synthesis time
+    regardless of total response length.
+    """
+    sentences = _split_sentences(text)
+    if not sentences:
+        return
+
+    _ui("state", "speaking")
+
+    # Kick off synthesis of the first sentence immediately
+    next_synth: asyncio.Task = asyncio.create_task(_synthesize(sentences[0], voice))
+
+    for i in range(len(sentences)):
+        if _stop_event.is_set():
+            next_synth.cancel()
+            try:
+                await next_synth
+            except (asyncio.CancelledError, Exception):
+                pass
+            break
+
+        # Wait for this sentence's audio (usually already done by the time we get here)
         try:
-            os.unlink(tmp_path)
+            path = await next_synth
+        except Exception as e:
+            log.warning("Synthesis failed for sentence %d: %s", i, e)
+            break
+
+        # Pre-synthesize the next sentence while this one plays
+        if i + 1 < len(sentences):
+            next_synth = asyncio.create_task(_synthesize(sentences[i + 1], voice))
+
+        # Play and clean up
+        await asyncio.to_thread(_play_mp3, path)
+        try:
+            os.unlink(path)
         except OSError:
             pass
+
+        if _stop_event.is_set():
+            if i + 1 < len(sentences):
+                next_synth.cancel()
+                try:
+                    await next_synth
+                except (asyncio.CancelledError, Exception):
+                    pass
+            break
 
 
 def _play_mp3(path: str):
@@ -102,8 +173,10 @@ def _play_mp3(path: str):
     _ensure_pygame()
     pygame.mixer.music.load(path)
     pygame.mixer.music.play()
-    while pygame.mixer.music.get_busy():
+    while pygame.mixer.music.get_busy() and not _stop_event.is_set():
         time.sleep(0.05)
+    if _stop_event.is_set():
+        pygame.mixer.music.stop()
 
 
 def _speak_pyttsx3(text: str):
@@ -111,12 +184,3 @@ def _speak_pyttsx3(text: str):
     engine = pyttsx3.init()
     engine.say(text)
     engine.runAndWait()
-
-
-def stop():
-    try:
-        import pygame
-        if _pygame_ready:
-            pygame.mixer.music.stop()
-    except Exception:
-        pass

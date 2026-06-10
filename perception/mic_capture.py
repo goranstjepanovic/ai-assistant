@@ -10,6 +10,7 @@ import numpy as np
 import sounddevice as sd
 
 from core.event_bus import EventBus, SpeechEvent
+from actions import tts as _tts
 
 log = logging.getLogger(__name__)
 
@@ -111,6 +112,9 @@ class MicCapture:
                 if self._mute_flag and self._mute_flag.is_set():
                     log.debug("PTT blocked — muted")
                     return
+                if _tts.is_speaking():
+                    _tts.stop()
+                    log.info("PTT pressed — interrupted TTS")
                 log.debug("Hotkey pressed — recording")
                 self._start_recording()
 
