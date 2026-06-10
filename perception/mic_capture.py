@@ -11,6 +11,7 @@ import sounddevice as sd
 
 from core.event_bus import EventBus, SpeechEvent
 from actions import tts as _tts
+from actions import enroll as _enroll_mod
 from perception import audio_monitor as _audio_monitor
 
 log = logging.getLogger(__name__)
@@ -357,10 +358,12 @@ class MicCapture:
                 for chunk in drained:
                     if (
                         self._tts_active
+                        or _tts.is_speaking()
+                        or _enroll_mod.is_recording()
                         or (self._mute_flag and self._mute_flag.is_set())
                         or _audio_monitor.is_active()
                     ):
-                        continue  # discard while TTS playing, muted, or system audio above threshold
+                        continue  # discard while TTS playing, enrolling, muted, or system audio above threshold
 
                     rms = float(np.sqrt(np.mean(chunk ** 2)))
 

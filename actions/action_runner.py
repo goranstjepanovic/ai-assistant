@@ -115,7 +115,10 @@ class ActionRunner:
 
         if tool_name == "enroll_voice":
             from actions import enroll as _enroll
-            return await _enroll.enroll_speaker(tool_input["name"], self._settings)
+            asyncio.create_task(
+                _enroll.enroll_speaker_background(tool_input["name"], self._settings)
+            )
+            return "__enrollment_started__"
 
         if tool_name == "remember_fact":
             if self._memory:

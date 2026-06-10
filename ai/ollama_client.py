@@ -114,6 +114,7 @@ class OllamaClient:
                     for tc in tool_calls_found
                 ],
             })
+            background_tool = False
             for tc in tool_calls_found:
                 name = tc.function.name
                 args = tc.function.arguments
@@ -123,8 +124,15 @@ class OllamaClient:
                 except Exception as e:
                     result = f"Error executing {name}: {e}"
                     log.exception("Tool %s raised", name)
+                # Sentinel: tool fired a background task and handles its own TTS.
+                # Return immediately so we don't send another request to Ollama.
+                if result == "__enrollment_started__":
+                    background_tool = True
                 full_messages.append({"role": "tool", "content": str(result)})
                 tool_call_count += 1
+
+            if background_tool:
+                return
 
         yield "I've reached the action limit for this request."
 

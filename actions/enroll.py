@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import threading
 
 import numpy as np
 import sounddevice as sd
@@ -16,18 +17,30 @@ _PHRASES = [
     "This is my voice. I speak clearly and naturally.",
 ]
 
+# Set while a recording clip is in progress — lets the wake word listener
+# suppress itself so Nyssa doesn't hear her own prompts or the user's enrollment audio.
+_recording_flag = threading.Event()
+
+
+def is_recording() -> bool:
+    return _recording_flag.is_set()
+
 
 async def _record_clip(device_index) -> np.ndarray:
     n_samples = _SAMPLE_RATE * _RECORD_SECS
-    audio = await asyncio.to_thread(
-        sd.rec,
-        n_samples,
-        samplerate=_SAMPLE_RATE,
-        channels=1,
-        dtype="float32",
-        device=device_index,
-        blocking=True,
-    )
+    _recording_flag.set()
+    try:
+        audio = await asyncio.to_thread(
+            sd.rec,
+            n_samples,
+            samplerate=_SAMPLE_RATE,
+            channels=1,
+            dtype="float32",
+            device=device_index,
+            blocking=True,
+        )
+    finally:
+        _recording_flag.clear()
     return audio.flatten()
 
 
@@ -52,17 +65,29 @@ async def enroll_speaker(name: str, settings) -> str:
     )
 
     for i, phrase in enumerate(_PHRASES, 1):
-        await tts.speak(
-            f"Phrase {i} of {total}. Say: {phrase}",
-            voice,
-            engine,
-        )
-        await asyncio.sleep(0.4)  # brief gap so playback device releases
+        await tts.speak(f"Phrase {i} of {total}. Say: {phrase}", voice, engine)
+        await asyncio.sleep(0.3)  # brief gap so the speaker device releases
         audio = await _record_clip(device)
         samples.append(audio)
         await tts.speak("Got it.", voice, engine)
 
     success = await asyncio.to_thread(sid.enroll, name, samples)
     if success:
-        return f"Voice enrolled for {name}. I'll recognise you from now on."
-    return "Enrollment failed. Please try again in a quiet environment."
+        await tts.speak(
+            f"Voice enrolled for {name}. I'll recognise you from now on.",
+            voice,
+            engine,
+        )
+        return f"enrolled:{name}"
+    await tts.speak("Enrollment failed. Please try again in a quiet environment.", voice, engine)
+    return "enrollment_failed"
+
+
+async def enroll_speaker_background(name: str, settings) -> None:
+    """Fire-and-forget wrapper: waits for any ongoing TTS to finish first."""
+    while tts.is_speaking():
+        await asyncio.sleep(0.05)
+    try:
+        await enroll_speaker(name, settings)
+    except Exception:
+        log.exception("Background enrollment failed")
