@@ -4,7 +4,7 @@ import queue
 from PyQt6.QtWidgets import QApplication, QWidget
 from PyQt6.QtCore import Qt, QTimer, QPointF, QRectF
 from PyQt6.QtGui import (
-    QPainter, QColor, QRadialGradient, QPen, QBrush, QPainterPath,
+    QPainter, QColor, QImage, QPixmap, QRadialGradient, QPen, QBrush, QPainterPath,
 )
 
 IDLE = "idle"
@@ -31,10 +31,38 @@ def _c(rgb: tuple, alpha: int) -> QColor:
     return QColor(rgb[0], rgb[1], rgb[2], max(0, min(255, alpha)))
 
 
+def _load_symbol_pixmap(path: str) -> QPixmap | None:
+    if not path:
+        return None
+    px = QPixmap(path)
+    if px.isNull():
+        import logging
+        logging.getLogger(__name__).warning("Could not load symbol image: %s", path)
+        return None
+    return px
+
+
+def _colorize(pixmap: QPixmap, size_px: int, rgb: tuple) -> QImage:
+    """Render pixmap at size_px, tinted to rgb, preserving alpha channel."""
+    buf = QImage(size_px, size_px, QImage.Format.Format_ARGB32_Premultiplied)
+    buf.fill(Qt.GlobalColor.transparent)
+
+    tmp = QPainter(buf)
+    tmp.setRenderHint(QPainter.RenderHint.Antialiasing)
+    tmp.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+    tmp.drawPixmap(0, 0, size_px, size_px, pixmap)
+    # Replace colors with state color, keep the image's alpha mask
+    tmp.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+    tmp.fillRect(0, 0, size_px, size_px, QColor(rgb[0], rgb[1], rgb[2], 255))
+    tmp.end()
+    return buf
+
+
 class OverlayWidget(QWidget):
-    def __init__(self, ui_queue: queue.Queue):
+    def __init__(self, ui_queue: queue.Queue, symbol_path: str = ""):
         super().__init__()
         self._queue = ui_queue
+        self._symbol_pixmap: QPixmap | None = _load_symbol_pixmap(symbol_path)
         self._state = IDLE
         self._level = 0.0
         self._phase = 0.0
@@ -175,7 +203,22 @@ class OverlayWidget(QWidget):
 
     def _draw_symbol(self, p: QPainter, cx: float, cy: float,
                      size: float, color: QColor):
-        """Nyssa trident: filled teardrop at top, two curved arms, vertical stem."""
+        if self._symbol_pixmap is not None:
+            self._draw_symbol_image(p, cx, cy, size, color)
+        else:
+            self._draw_symbol_trident(p, cx, cy, size, color)
+
+    def _draw_symbol_image(self, p: QPainter, cx: float, cy: float,
+                           size: float, color: QColor):
+        size_px = max(1, int(size * 2))
+        rgb = (color.red(), color.green(), color.blue())
+        img = _colorize(self._symbol_pixmap, size_px, rgb)
+        p.setOpacity(color.alphaF())
+        p.drawImage(QRectF(cx - size, cy - size, size * 2, size * 2), img)
+        p.setOpacity(1.0)
+
+    def _draw_symbol_trident(self, p: QPainter, cx: float, cy: float,
+                             size: float, color: QColor):
         s = size
 
         # Teardrop (filled) at top

@@ -83,7 +83,7 @@ if __name__ == "__main__":
 
         # Qt must run on the main thread
         app = QApplication(sys.argv)
-        widget = OverlayWidget(ui_queue)
+        widget = OverlayWidget(ui_queue, symbol_path=getattr(settings, "symbol_image", ""))
         sys.exit(app.exec())
 
     except ImportError:

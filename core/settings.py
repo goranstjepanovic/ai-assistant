@@ -12,6 +12,7 @@ DEFAULTS = {
     "tts_voice": "en-GB-SoniaNeural",
     "tts_engine": "edge-tts",
     "audio_output_device": None,
+    "symbol_image": "",
     "screen_capture_backend": "mss",
     "screen_capture_monitor": -1,
     "screenshot_resize": [1280, 720],
