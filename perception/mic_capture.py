@@ -230,7 +230,8 @@ class MicCapture:
         # Strip punctuation so "Hey, Nyssa, ..." matches "hey nyssa"
         clean = re.sub(r"[^\w\s]", " ", text)
         clean = re.sub(r"\s+", " ", clean).strip()
-        log.info("Wake word listener heard: %r", text)
+        speaker = self._identify_speaker(audio)
+        log.info("Wake word listener heard: %r speaker=%s", text, speaker or "unknown")
 
         for wake in variants:
             idx = clean.find(wake)
@@ -240,12 +241,13 @@ class MicCapture:
                 self._ui("state", "listening")
                 if command:
                     # Full command in same utterance — dispatch immediately
-                    log.info("Wake word %r + command: %r", wake, command)
+                    log.info("Wake word %r + command: %r speaker=%s", wake, command, speaker or "unknown")
                     event = SpeechEvent(
                         text=command,
                         timestamp=time.time(),
                         confidence=0.8,
                         hotkey_triggered=False,
+                        speaker=speaker,
                     )
                     self._bus.publish_threadsafe("speech", event)
                 else:

@@ -50,7 +50,7 @@ class Orchestrator:
             log.debug("Blocked: %s", decision.reason)
             return
 
-        log.info("User: %r", event.text)
+        log.info("User [%s]: %r", event.speaker or "unknown", event.text)
 
         recent_turns, relevant, relationship = await asyncio.gather(
             asyncio.to_thread(
