@@ -11,6 +11,7 @@ IDLE = "idle"
 LISTENING = "listening"
 PROCESSING = "processing"
 SPEAKING = "speaking"
+FOLLOW_UP = "follow_up"
 
 # Near-black warm background
 _BG = QColor(8, 4, 4, 200)
@@ -21,6 +22,7 @@ _RGB = {
     LISTENING:  (205, 28, 42),
     PROCESSING: (155, 20, 32),
     SPEAKING:   (220, 32, 50),
+    FOLLOW_UP:  (90,  18, 28),
 }
 
 # Per-bar phase offsets so bars animate independently
@@ -201,7 +203,7 @@ class OverlayWidget(QWidget):
             start = int((self._phase * 180.0 / math.pi * 16) % (360 * 16))
             p.drawArc(rect, start, int(210 * 16))
 
-        # Waveform bars for listening / speaking
+        # Waveform bars for listening / speaking (not during follow-up idle)
         if self._state in (LISTENING, SPEAKING):
             self._draw_bars(p, cx, cy + outer * 0.45, outer, rgb)
 

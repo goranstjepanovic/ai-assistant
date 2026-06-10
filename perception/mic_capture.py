@@ -56,6 +56,7 @@ class MicCapture:
         self._ui_queue = ui_queue
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._follow_up_until: float = 0.0
+        self._follow_up_showing: bool = False
         self._follow_up_queue: asyncio.Queue = asyncio.Queue()
         self._tts_start_queue: asyncio.Queue = asyncio.Queue()
         self._tts_active: bool = False
@@ -310,12 +311,19 @@ class MicCapture:
                         self._tts_active = False
                         if fu.duration_s > 0:
                             self._follow_up_until = time.monotonic() + fu.duration_s
+                            self._follow_up_showing = True
                             log.info("Follow-up window opened for %.0fs", fu.duration_s)
                             self._ui("state", "follow_up")
                         else:
                             log.debug("TTS ended — mic restored")
                     except asyncio.QueueEmpty:
                         break
+
+                # Close follow-up window once it expires
+                if self._follow_up_showing and time.monotonic() >= self._follow_up_until:
+                    self._follow_up_showing = False
+                    self._ui("state", "idle")
+                    log.debug("Follow-up window expired")
 
                 if not drained:
                     await asyncio.sleep(_WW_CHUNK_SECS)
