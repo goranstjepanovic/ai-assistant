@@ -633,10 +633,10 @@ elevenlabs>=1.0.0   # premium TTS
 - [x] ChromaDB + sentence-transformers embeddings
 - [x] Memory retrieval in orchestrator
 - [x] Memory write pipeline (conversation + fact extraction via Ollama)
-- [ ] ScreenCapture module (`perception/screen_capture.py` — mss-based)
-- [ ] Gatekeeper screenshot trigger (detect "look at", "what's on screen", game mode)
-- [ ] Vision context in Ollama call (pass base64 image in message)
-- **Milestone:** AI remembers facts across sessions; sees screen when asked
+- [x] ScreenCapture module (`perception/screen_capture.py` — mss-based)
+- [x] Gatekeeper screenshot trigger (detect "look at", "what's on screen", game mode)
+- [x] Vision context in Ollama call (pass image bytes in user message)
+- **Milestone:** AI remembers facts across sessions; sees screen when asked ✅
 
 ### Phase 3 — Full perception (week 3)
 - [ ] Wake word detection in MicCapture (substring match on transcript)
