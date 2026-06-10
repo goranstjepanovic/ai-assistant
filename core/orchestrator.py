@@ -49,13 +49,14 @@ class Orchestrator:
 
         log.info("User: %r", event.text)
 
-        recent_turns, relevant = await asyncio.gather(
+        recent_turns, relevant, relationship = await asyncio.gather(
             asyncio.to_thread(
                 self._memory.get_recent_turns, self._settings.memory_recent_turns
             ),
             asyncio.to_thread(
                 self._memory.search_relevant, event.text, self._settings.memory_semantic_k
             ),
+            asyncio.to_thread(self._memory.get_relationship_facts),
         )
 
         app_context = window.app_class if window else ""
@@ -75,7 +76,7 @@ class Orchestrator:
             except Exception:
                 log.exception("Screen capture failed — continuing without screenshot")
 
-        system = build_system_prompt(window, self._settings, relevant, has_screenshot=screenshot_attached)
+        system = build_system_prompt(window, self._settings, relevant, relationship, has_screenshot=screenshot_attached)
 
         messages = recent_turns + [user_message]
 

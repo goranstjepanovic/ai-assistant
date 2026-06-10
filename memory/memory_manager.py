@@ -68,6 +68,16 @@ class MemoryManager:
 
     # ── Reads ─────────────────────────────────────────────────────────────────
 
+    def get_relationship_facts(self, limit: int = 12) -> list[str]:
+        """Return the most recently updated relationship signals (rel_* keys)."""
+        if not self._ready:
+            return []
+        rows = self._conn.execute(
+            "SELECT key, value FROM facts WHERE key LIKE 'rel_%' ORDER BY updated_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [f"{r['key'][4:]}: {r['value']}" for r in rows]
+
     def get_recent_turns(self, n: int) -> list[dict]:
         if not self._ready:
             return []
