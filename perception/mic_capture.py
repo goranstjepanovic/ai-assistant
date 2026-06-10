@@ -54,6 +54,7 @@ class MicCapture:
         self._stream: Optional[sd.InputStream] = None
         self._transcribing = False
         self._ui_queue = ui_queue
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
 
     # ── Model loading ─────────────────────────────────────────────────────────
 
@@ -206,17 +207,23 @@ class MicCapture:
             idx = clean.find(wake)
             if idx != -1:
                 command = clean[idx + len(wake):].strip()
-                if not command:
-                    log.debug("Wake word %r detected but no command followed", wake)
-                    return
-                log.info("Wake word %r triggered: command = %r", wake, command)
-                event = SpeechEvent(
-                    text=command,
-                    timestamp=time.time(),
-                    confidence=0.8,
-                    hotkey_triggered=False,
-                )
-                self._bus.publish_threadsafe("speech", event)
+                if command:
+                    # Full command in same utterance — dispatch immediately
+                    log.info("Wake word %r + command: %r", wake, command)
+                    event = SpeechEvent(
+                        text=command,
+                        timestamp=time.time(),
+                        confidence=0.8,
+                        hotkey_triggered=False,
+                    )
+                    self._bus.publish_threadsafe("speech", event)
+                else:
+                    # Wake word only — start two-stage listen
+                    log.info("Wake word %r detected — opening mic for command", wake)
+                    if self._loop is not None:
+                        asyncio.run_coroutine_threadsafe(
+                            self._wakeword_listen_for_command(), self._loop
+                        )
                 return
 
     async def _run_wakeword_listener(self):
@@ -285,9 +292,33 @@ class MicCapture:
 
     # ── Main entry point ──────────────────────────────────────────────────────
 
+    async def _wakeword_listen_for_command(self):
+        """Open mic, wait for one utterance, transcribe, dispatch — called after wake word."""
+        if self._recording:
+            return
+        log.info("Wake word activated — listening for command...")
+        self._start_recording()
+        # Poll until speech arrives then goes silent (mirrors wake word VAD logic)
+        silence = 0
+        prev_count = 0
+        for _ in range(80):   # 8 s hard cap
+            await asyncio.sleep(_WW_CHUNK_SECS)
+            cur_count = len(self._audio_chunks)
+            if cur_count > prev_count:
+                rms = float(np.sqrt(np.mean(self._audio_chunks[-1] ** 2)))
+                silence = 0 if rms >= _WW_SPEECH_RMS else silence + 1
+                prev_count = cur_count
+            else:
+                silence += 1
+            if silence >= _WW_SILENCE_END and cur_count > 5:
+                break
+        if self._recording:
+            self._stop_and_transcribe()
+
     async def run(self):
         from pynput import keyboard as kb
 
+        self._loop = asyncio.get_running_loop()
         combo = "+".join(self._modifiers + [self._trigger]).upper()
         log.info("MicCapture started — hold [%s] to speak", combo)
         log.info("Loading Whisper model in background...")
