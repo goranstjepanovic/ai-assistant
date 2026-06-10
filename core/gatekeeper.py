@@ -44,6 +44,19 @@ class Gatekeeper:
 
         self._last_activation = now
 
+        # Wake word activations are suppressed during game/media — use hotkey to override
+        if not event.hotkey_triggered and window is not None:
+            if window.app_class in ("game", "media"):
+                log.debug(
+                    "Wake word suppressed: %s mode active (use hotkey to override)",
+                    window.app_class,
+                )
+                return GatekeeperDecision(
+                    pass_event=False,
+                    include_screenshot=False,
+                    reason=f"mic suppressed in {window.app_class} mode",
+                )
+
         text_lower = event.text.lower()
         phrase_match = any(p in text_lower for p in _SCREENSHOT_PHRASES)
         game_mode = window is not None and window.app_class == "game"
