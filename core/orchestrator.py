@@ -59,8 +59,7 @@ class Orchestrator:
         )
 
         app_context = window.app_class if window else ""
-        system = build_system_prompt(window, self._settings, relevant)
-
+        screenshot_attached = False
         user_message: dict = {"role": "user", "content": event.text}
 
         if decision.include_screenshot:
@@ -69,9 +68,12 @@ class Orchestrator:
                 quality = self._settings.screenshot_quality
                 screenshot = await asyncio.to_thread(capture_now, resize, quality)
                 user_message["images"] = [screenshot]
+                screenshot_attached = True
                 log.info("Screenshot attached (%d KB)", len(screenshot) // 1024)
             except Exception:
                 log.exception("Screen capture failed — continuing without screenshot")
+
+        system = build_system_prompt(window, self._settings, relevant, has_screenshot=screenshot_attached)
 
         messages = recent_turns + [user_message]
 

@@ -6,18 +6,28 @@ log = logging.getLogger(__name__)
 
 _SCREENSHOT_PHRASES = (
     "look at",
+    "look at this",
+    "look at my screen",
     "what's on screen",
     "what is on screen",
-    "what am i looking at",
-    "help me with this",
-    "can you see",
-    "what do you see",
     "what's on my screen",
     "what is on my screen",
+    "what am i looking at",
+    "what do you see",
+    "what can you see",
+    "can you see",
+    "see my screen",
     "see this",
+    "show me",
+    "help me with this",
     "read this",
+    "read my screen",
     "what is this",
     "what's this",
+    "analyze this",
+    "analyse this",
+    "check my screen",
+    "screen",
 )
 
 
