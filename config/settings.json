@@ -1,6 +1,6 @@
 {
   "assistant_name": "Nyssa",
-  "wake_word": "hey nyssa|hey lisa|hey nissa",
+  "wake_word": "hey nyssa|hey lisa|hey nissa|hey nisa|ok nyssa|ok lisa|ok nissa|ok nisa",
   "hotkey": "alt_r+space",
   "mic_device_index": null,
   "whisper_model": "small",
