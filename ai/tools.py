@@ -39,6 +39,31 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "web_search",
+            "description": (
+                "Search the web using DuckDuckGo and return titles, URLs, and snippets. "
+                "Use this for current events, facts you're unsure about, prices, weather, "
+                "documentation, or anything that may have changed since your training."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "The search query",
+                    },
+                    "max_results": {
+                        "type": "integer",
+                        "description": "Number of results to return (default 5, max 10)",
+                    },
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "open_url",
             "description": "Open a URL in the default browser.",
             "parameters": {

@@ -7,6 +7,7 @@ from pathlib import Path
 from actions import keyboard
 from actions import apps as apps_module
 from actions import shell as shell_module
+from actions import search as search_module
 
 log = logging.getLogger(__name__)
 
@@ -45,6 +46,12 @@ class ActionRunner:
         return result
 
     async def _dispatch(self, tool_name: str, tool_input: dict) -> str:
+        if tool_name == "web_search":
+            return await search_module.web_search_async(
+                tool_input["query"],
+                tool_input.get("max_results", 5),
+            )
+
         if tool_name == "list_apps":
             return await apps_module.list_apps_async()
 
