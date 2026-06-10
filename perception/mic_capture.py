@@ -207,6 +207,8 @@ class MicCapture:
             idx = clean.find(wake)
             if idx != -1:
                 command = clean[idx + len(wake):].strip()
+                # Immediate UI feedback on wake word recognition
+                self._ui("state", "listening")
                 if command:
                     # Full command in same utterance — dispatch immediately
                     log.info("Wake word %r + command: %r", wake, command)
