@@ -4,7 +4,7 @@ import queue
 from PyQt6.QtWidgets import QApplication, QWidget
 from PyQt6.QtCore import Qt, QTimer, QPointF, QRectF
 from PyQt6.QtGui import (
-    QPainter, QColor, QImage, QPixmap, QRadialGradient, QPen, QBrush, QPainterPath,
+    QPainter, QColor, QPixmap, QRadialGradient, QPen, QBrush, QPainterPath,
 )
 
 IDLE = "idle"
@@ -40,13 +40,12 @@ def _load_symbol_pixmap(path: str) -> QPixmap | None:
         import io
         img = Image.open(path).convert("RGBA")
         # Build alpha from inverse luminosity: dark pixels → opaque, white → transparent.
-        # This removes white backgrounds and preserves anti-aliased edges.
+        # Original colors are preserved so the logo displays as-is.
         lum = img.convert("L")
         alpha = ImageOps.invert(lum)
-        white = Image.new("RGBA", img.size, (255, 255, 255, 255))
-        white.putalpha(alpha)
+        img.putalpha(alpha)
         buf = io.BytesIO()
-        white.save(buf, format="PNG")
+        img.save(buf, format="PNG")
         px = QPixmap()
         px.loadFromData(buf.getvalue())
         if px.isNull():
@@ -57,22 +56,6 @@ def _load_symbol_pixmap(path: str) -> QPixmap | None:
         logging.getLogger(__name__).warning("Symbol image load failed (%s): %s — falling back to Qt loader", path, exc)
         px = QPixmap(path)
         return None if px.isNull() else px
-
-
-def _colorize(pixmap: QPixmap, size_px: int, rgb: tuple) -> QImage:
-    """Render pixmap at size_px, tinted to rgb, preserving alpha channel."""
-    buf = QImage(size_px, size_px, QImage.Format.Format_ARGB32_Premultiplied)
-    buf.fill(Qt.GlobalColor.transparent)
-
-    tmp = QPainter(buf)
-    tmp.setRenderHint(QPainter.RenderHint.Antialiasing)
-    tmp.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
-    tmp.drawPixmap(0, 0, size_px, size_px, pixmap)
-    # Replace colors with state color, keep the image's alpha mask
-    tmp.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
-    tmp.fillRect(0, 0, size_px, size_px, QColor(rgb[0], rgb[1], rgb[2], 255))
-    tmp.end()
-    return buf
 
 
 class OverlayWidget(QWidget):
@@ -227,11 +210,10 @@ class OverlayWidget(QWidget):
 
     def _draw_symbol_image(self, p: QPainter, cx: float, cy: float,
                            size: float, color: QColor):
-        size_px = max(1, int(size * 2))
-        rgb = (color.red(), color.green(), color.blue())
-        img = _colorize(self._symbol_pixmap, size_px, rgb)
+        p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
         p.setOpacity(color.alphaF())
-        p.drawImage(QRectF(cx - size, cy - size, size * 2, size * 2), img)
+        p.drawPixmap(QRectF(cx - size, cy - size, size * 2, size * 2),
+                     self._symbol_pixmap, QRectF(self._symbol_pixmap.rect()))
         p.setOpacity(1.0)
 
     def _draw_symbol_trident(self, p: QPainter, cx: float, cy: float,
