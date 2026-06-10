@@ -1,14 +1,14 @@
-# PRD — Personal AI Assistant (codename: Jarvis)
-**Version:** 0.1 — Initial  
+# PRD — Personal AI Assistant (Nyssa)
+**Version:** 0.2 — Ollama migration  
 **Platform:** Windows 11, Python 3.11+  
-**AI backend:** Cloud (Claude API — vision + tool use)  
-**Status:** Pre-implementation
+**AI backend:** Local (Ollama — vision + tool use)  
+**Status:** Phase 1 complete, Phase 2 in progress
 
 ---
 
 ## 1. Overview
 
-A always-on local Python daemon that acts as a personal AI assistant with full awareness of what is happening on the user's PC. It listens via microphone, watches the screen, knows which application is in focus, and can respond by voice and by executing actions on the PC (keypresses, mouse, shell commands, browser automation). All user data and memory stays local. Only conversation content + screen snapshots explicitly included by the user are sent to the cloud AI.
+An always-on local Python daemon that acts as a personal AI assistant with full awareness of what is happening on the user's PC. It listens via microphone, watches the screen, knows which application is in focus, and can respond by voice and by executing actions on the PC (keypresses, mouse, shell commands, browser automation). All processing — including the AI inference — runs entirely locally via Ollama. No data leaves the machine.
 
 ---
 
@@ -26,7 +26,7 @@ A always-on local Python daemon that acts as a personal AI assistant with full a
 ## 3. Non-goals (v0.1)
 
 - No GUI / tray icon (CLI daemon only; UI is a v0.2 concern)
-- No local LLM inference (cloud only for now)
+- No cloud AI fallback (fully local via Ollama)
 - No mobile / cross-device sync
 - No always-on video stream (camera is on-demand only)
 - No proactive / unprompted alerts (reactive only — user must invoke)
@@ -70,9 +70,9 @@ A always-on local Python daemon that acts as a personal AI assistant with full a
 │  │  ChromaDB (RAG)   │  │  TTS voice output       │  │
 │  └───────────────────┘  └────────────────────────┘  │
 └──────────────────────────────┬──────────────────────┘
-                               │ HTTPS API call
+                               │ localhost HTTP
                     ┌──────────▼──────────┐
-                    │   Cloud AI (Claude) │
+                    │   Ollama (local)    │
                     │  vision + tool use  │
                     └─────────────────────┘
 ```
@@ -177,7 +177,7 @@ A always-on local Python daemon that acts as a personal AI assistant with full a
 3. If `include_screenshot`: call `ScreenCapture.capture_now()`, encode as base64 JPEG
 4. Assemble system prompt (see §6)
 5. Build messages array: system prompt + memory context + [image if captured] + current user utterance
-6. Call Claude API with tool definitions (see §7)
+6. Call Ollama API with tool definitions (see §7)
 7. If response contains tool calls: dispatch to ActionRunner, collect results, continue conversation loop until no more tool calls
 8. Speak final text response via TTS
 9. Write to memory:
@@ -304,7 +304,7 @@ class MemoryManager:
 ## 6. System prompt
 
 ```
-You are Jarvis, a personal AI assistant running locally on the user's PC.
+You are Nyssa, a personal AI assistant running locally on the user's PC.
 You have access to the user's screen, microphone, and can execute actions on their computer.
 
 Current context:
@@ -326,9 +326,9 @@ Guidelines:
 
 ---
 
-## 7. Tool definitions (Claude API format)
+## 7. Tool definitions (Ollama tool use format)
 
-All tools follow the Anthropic tool use schema. The orchestrator passes the full list on every call. Key fields only shown here — implementation should use full JSON schema format.
+All tools follow the Ollama tool use schema (OpenAI-compatible). The orchestrator passes the full list on every call. Key fields only shown here — implementation should use full JSON schema format.
 
 ```python
 TOOLS = [
@@ -482,15 +482,15 @@ All configuration lives in `config/settings.json`. Created with defaults on firs
   "memory_recent_turns": 10,
   "memory_semantic_k": 5,
   "max_tool_calls_per_turn": 10,
-  "anthropic_api_key_env": "ANTHROPIC_API_KEY",
-  "claude_model": "claude-sonnet-4-6",
-  "claude_max_tokens": 1024,
+  "ollama_model": "gemma4",
+  "ollama_host": "http://localhost:11434",
+  "api_timeout_s": 60.0,
   "log_level": "INFO",
   "log_dir": "logs"
 }
 ```
 
-API key read from environment variable only — never stored in config file.
+No API keys required. Ollama runs entirely on localhost.
 
 ---
 
@@ -540,7 +540,7 @@ jarvis/
 ## 10. Dependencies (`requirements.txt`)
 
 ```
-anthropic>=0.25.0
+ollama>=0.3.0
 faster-whisper>=1.0.0
 silero-vad>=5.0
 sounddevice>=0.4.6
@@ -577,8 +577,8 @@ elevenlabs>=1.0.0   # premium TTS
    a. Retrieve memory: last 3 turns, 5 relevant facts
    b. Call ScreenCapture.capture_now() → JPEG bytes
    c. Assemble prompt: system + memory + screenshot + "what's that health bar showing"
-   d. Call Claude API (vision mode, tools attached)
-5. Claude: reads screenshot, responds "That's your stamina bar, it's at about 40%"
+   d. Call Ollama API (vision mode, tools attached)
+5. Nyssa: reads screenshot, responds "That's your stamina bar, it's at about 40%"
    (no tool calls needed)
 6. TTS: speaks response
 7. Memory: write conversation turn; no new facts extracted
@@ -592,9 +592,9 @@ elevenlabs>=1.0.0   # premium TTS
 1. User: "hey jarvis, open the GitHub page for ThinkTank"
 2. Gatekeeper: wake word detected, app_class=browser → pass; include_screenshot=False
 3. Orchestrator: assembles context (no screenshot)
-4. Claude: responds with tool call open_url("https://github.com/goranstjepanovic/thinktank")
+4. Nyssa: responds with tool call open_url("https://github.com/goranstjepanovic/thinktank")
 5. ActionRunner.open_url() executes
-6. Claude: "Done, opened your ThinkTank repo."
+6. Nyssa: "Done, opened your ThinkTank repo."
 7. TTS speaks, memory writes turn
 ```
 
@@ -603,48 +603,48 @@ elevenlabs>=1.0.0   # premium TTS
 ## 13. Event flow — example: shell command with confirmation
 
 ```
-1. User: "hey jarvis, run my test suite"
-2. Orchestrator: assembles, sends to Claude
-3. Claude: tool call run_shell("python -m pytest", "C:/projects/thinktank")
+1. User: "hey nyssa, run my test suite"
+2. Orchestrator: assembles, sends to Ollama
+3. Nyssa: tool call run_shell("python -m pytest", "C:/projects/thinktank")
 4. ActionRunner: speaks "I need to run: python -m pytest in C:/projects/thinktank. Say yes to confirm."
 5. MicCapture: listens for confirmation (bypasses wake word for 10 s)
 6. User: "yes"
 7. ActionRunner: executes, streams stdout
-8. Claude: summarises result via TTS
+8. Nyssa: summarises result via TTS
 ```
 
 ---
 
 ## 14. Implementation phases
 
-### Phase 1 — Core loop (week 1)
-- [ ] Project scaffold, event bus, settings loader
-- [ ] WindowMonitor + basic app classification
-- [ ] Gatekeeper (rule-based, hotkey support)
-- [ ] Basic MicCapture (no VAD yet — push-to-talk only via hotkey)
-- [ ] Orchestrator skeleton — hardcoded system prompt, no memory
-- [ ] Claude client with tool use loop
-- [ ] TTS output (edge-tts)
-- [ ] `type_text` and `press_key` tools only
-- **Milestone:** Say hotkey + question, get spoken answer, can type a response
+### Phase 1 — Core loop ✅ COMPLETE
+- [x] Project scaffold, event bus, settings loader
+- [x] WindowMonitor + basic app classification
+- [x] Gatekeeper (cooldown + hotkey support)
+- [x] Basic MicCapture (push-to-talk via hotkey, Whisper built-in VAD filter)
+- [x] Orchestrator skeleton — system prompt, no memory
+- [x] Ollama client with tool use loop
+- [x] TTS output (edge-tts → pygame, pyttsx3 fallback)
+- [x] `type_text` and `press_key` tools
+- **Milestone:** Say hotkey + question, get spoken answer, can type a response ✅
 
-### Phase 2 — Memory + screen (week 2)
-- [ ] SQLite store + MemoryManager
-- [ ] ChromaDB + sentence-transformers embeddings
-- [ ] Memory retrieval in orchestrator
-- [ ] Memory write pipeline (conversation + fact extraction)
-- [ ] ScreenCapture module
-- [ ] Gatekeeper screenshot trigger logic
-- [ ] Vision context in Claude call
+### Phase 2 — Memory + screen (in progress)
+- [x] SQLite store + MemoryManager
+- [x] ChromaDB + sentence-transformers embeddings
+- [x] Memory retrieval in orchestrator
+- [x] Memory write pipeline (conversation + fact extraction via Ollama)
+- [ ] ScreenCapture module (`perception/screen_capture.py` — mss-based)
+- [ ] Gatekeeper screenshot trigger (detect "look at", "what's on screen", game mode)
+- [ ] Vision context in Ollama call (pass base64 image in message)
 - **Milestone:** AI remembers facts across sessions; sees screen when asked
 
 ### Phase 3 — Full perception (week 3)
-- [ ] VAD integration (Silero) in MicCapture
-- [ ] Wake word detection
+- [ ] Wake word detection in MicCapture (substring match on transcript)
+- [ ] App-based mic suppression in Gatekeeper (game/media → suppress unless hotkey)
 - [ ] System audio level monitoring for suppression
-- [ ] Full app classification rules + game_processes.json
+- [ ] Full app classification rules + `game_processes.json`
 - [ ] `send_keys_to_window` for background injection
-- [ ] `run_shell` with confirmation flow
+- [ ] `run_shell` with voice confirmation flow
 - [ ] `browser_navigate` + `browser_click` via Playwright
 - **Milestone:** Hands-free, game-aware, safe shell execution
 
@@ -663,10 +663,10 @@ elevenlabs>=1.0.0   # premium TTS
 
 | Risk | Mitigation |
 |---|---|
-| Whisper latency on CPU | Use `base` model; upgrade to `small` if RTX 4070 Super CUDA path available |
-| 12 GB VRAM — sentence-transformers still needed | `all-MiniLM-L6-v2` is CPU-only, ~100 MB, no VRAM impact |
+| Whisper latency on CPU | Use `small` model on CUDA; CPU fallback with `int8` quantisation |
+| Ollama VRAM usage competes with other apps | gemma4 is quantised; sentence-transformers runs CPU-only (~100 MB, no VRAM) |
+| Vision model quality | Use a multimodal model in Ollama (e.g. gemma4, llava); resize screenshots to 720p JPEG Q75 |
 | Keypress injection blocked by anti-cheat | Scoped to offline/single-player games; documented in README |
-| API cost from frequent screenshot sends | Screenshots only on explicit trigger or game mode; resize to 720p, JPEG Q75 |
 | VAD false positives from TV/speaker bleed | System audio level gate + app_class suppression as primary defence |
 | Shell command safety | Confirmation gate, command logged, no auto-execution ever |
 
@@ -676,7 +676,7 @@ elevenlabs>=1.0.0   # premium TTS
 
 - Tray icon / settings GUI
 - Proactive alerts (calendar, email, system events)
-- Local LLM fallback (Ollama routing for offline use)
+- Cloud AI fallback (optional Claude/OpenAI path for higher quality)
 - Multi-monitor awareness
 - Plugin system for custom tools
 - Linux / macOS support
