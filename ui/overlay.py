@@ -72,20 +72,27 @@ def _load_symbol_pixmap(path: str) -> QPixmap | None:
     )
 
 
-def _make_tray_icon(muted: bool) -> QIcon:
+def _make_tray_icon(muted: bool, symbol_pixmap: QPixmap | None = None) -> QIcon:
     px = QPixmap(22, 22)
     px.fill(Qt.GlobalColor.transparent)
     p = QPainter(px)
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    color = QColor(80, 80, 80) if muted else QColor(205, 28, 42)
-    p.setBrush(QBrush(color))
-    p.setPen(Qt.PenStyle.NoPen)
-    p.drawEllipse(2, 2, 18, 18)
+
+    if symbol_pixmap is not None:
+        p.setOpacity(0.3 if muted else 1.0)
+        p.drawPixmap(0, 0, 22, 22, symbol_pixmap)
+        p.setOpacity(1.0)
+    else:
+        color = QColor(80, 80, 80) if muted else QColor(205, 28, 42)
+        p.setBrush(QBrush(color))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.drawEllipse(2, 2, 18, 18)
+
     if muted:
-        # Draw a small diagonal line to indicate muted
-        p.setPen(QPen(QColor(180, 180, 180), 2.5,
+        p.setPen(QPen(QColor(220, 60, 60), 2.5,
                       Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
-        p.drawLine(6, 6, 16, 16)
+        p.drawLine(5, 5, 17, 17)
+
     p.end()
     return QIcon(px)
 
@@ -126,7 +133,7 @@ class OverlayWidget(QWidget):
 
     def _setup_tray(self):
         self._tray = QSystemTrayIcon(self)
-        self._tray.setIcon(_make_tray_icon(False))
+        self._tray.setIcon(_make_tray_icon(False, self._symbol_pixmap))
         self._tray.setToolTip("Nyssa")
 
         menu = QMenu()
@@ -167,13 +174,13 @@ class OverlayWidget(QWidget):
         if self._mute_flag.is_set():
             self._mute_flag.clear()
             self._mute_action.setText("Mute")
-            self._tray.setIcon(_make_tray_icon(False))
+            self._tray.setIcon(_make_tray_icon(False, self._symbol_pixmap))
             self._tray.setToolTip("Nyssa")
             self._state = IDLE
         else:
             self._mute_flag.set()
             self._mute_action.setText("Unmute")
-            self._tray.setIcon(_make_tray_icon(True))
+            self._tray.setIcon(_make_tray_icon(True, self._symbol_pixmap))
             self._tray.setToolTip("Nyssa (Muted)")
             self._state = MUTED
             self._ripples = []
