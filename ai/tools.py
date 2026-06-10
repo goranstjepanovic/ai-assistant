@@ -135,6 +135,31 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "send_keys_to_window",
+            "description": (
+                "Send a key or key combination to a specific application window "
+                "without changing focus. Useful for controlling games or background apps. "
+                "Examples: press 'f' in 'minecraft' while doing something else."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "process_name": {
+                        "type": "string",
+                        "description": "Process name, e.g. 'minecraft', 'notepad', 'chrome'",
+                    },
+                    "key": {
+                        "type": "string",
+                        "description": "Key or combo, e.g. 'f', 'ctrl+s', 'escape'",
+                    },
+                },
+                "required": ["process_name", "key"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "press_key",
             "description": (
                 "Press a key or key combination. "
