@@ -22,6 +22,18 @@ _WW_SILENCE_END = 15         # chunks of silence to end a segment (~1.5 s)
 _WW_MAX_SECS = 8.0           # hard cap per segment
 
 
+# Map pynput key names to the canonical names used in config.
+# Left/right variants collapse to a single name; AltGr → alt_r.
+_KEY_CANONICAL: dict[str, str] = {
+    "ctrl_l":  "ctrl",  "ctrl_r":  "ctrl",
+    "shift_l": "shift", "shift_r": "shift",
+    "alt_l":   "alt",
+    "alt_gr":  "alt_r",   # AltGr on European keyboards
+    "cmd_l":   "win",   "cmd_r":   "win",
+    "super_l": "win",   "super_r": "win",
+}
+
+
 def _parse_hotkey(hotkey_str: str) -> tuple[list[str], str]:
     parts = [p.strip().lower() for p in hotkey_str.split("+")]
     return parts[:-1], parts[-1]
@@ -71,13 +83,17 @@ class MicCapture:
     def _key_name(self, key) -> str:
         from pynput.keyboard import Key, KeyCode
         if isinstance(key, Key):
-            return key.name.lower()
+            raw = key.name.lower()
+            return _KEY_CANONICAL.get(raw, raw)
         if isinstance(key, KeyCode) and key.char:
             return key.char.lower()
         return ""
 
     def _on_press(self, key):
         name = self._key_name(key)
+        if not name:
+            return
+        log.debug("key press: %r  held=%s", name, self._held)
         self._held.add(name)
         if name == self._trigger and not self._recording:
             if all(m in self._held for m in self._modifiers):
