@@ -328,10 +328,12 @@ class MicCapture:
                     except asyncio.QueueEmpty:
                         break
 
-                # Close follow-up window once it expires
+                # Close follow-up window once it expires, but only if TTS is
+                # not already active — a new response may have started speaking.
                 if self._follow_up_showing and time.monotonic() >= self._follow_up_until:
                     self._follow_up_showing = False
-                    self._ui("state", "idle")
+                    if not self._tts_active:
+                        self._ui("state", "idle")
                     log.debug("Follow-up window expired")
 
                 if not drained:

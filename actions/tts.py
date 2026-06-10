@@ -129,27 +129,32 @@ async def _speak_stream_pipeline(chunk_gen, voice: str) -> str:
     text_parts: list[str] = []
 
     async def producer():
-        buf = ""
-        async for chunk in chunk_gen:
-            if _stop_event.is_set():
-                break
-            text_parts.append(chunk)
-            buf += chunk
-            # Flush any complete sentences
-            while True:
-                m = re.search(r"(?<=[.!?])\s+", buf)
-                if not m:
+        # try/except/finally ensures the sentinel is ALWAYS sent, even on error.
+        # Without this, gather() would propagate the exception immediately while
+        # player() is still playing, causing _ui("state","idle") to fire too early.
+        try:
+            buf = ""
+            async for chunk in chunk_gen:
+                if _stop_event.is_set():
                     break
-                sentence = _strip_markdown(buf[: m.end()])
-                buf = buf[m.end():]
+                text_parts.append(chunk)
+                buf += chunk
+                while True:
+                    m = re.search(r"(?<=[.!?])\s+", buf)
+                    if not m:
+                        break
+                    sentence = _strip_markdown(buf[: m.end()])
+                    buf = buf[m.end():]
+                    if sentence:
+                        await synth_q.put(asyncio.create_task(_synthesize(sentence, voice)))
+            if buf.strip() and not _stop_event.is_set():
+                sentence = _strip_markdown(buf)
                 if sentence:
                     await synth_q.put(asyncio.create_task(_synthesize(sentence, voice)))
-        # Flush remainder
-        if buf.strip() and not _stop_event.is_set():
-            sentence = _strip_markdown(buf)
-            if sentence:
-                await synth_q.put(asyncio.create_task(_synthesize(sentence, voice)))
-        await synth_q.put(None)  # sentinel — playlist is complete
+        except Exception:
+            log.exception("TTS producer error")
+        finally:
+            await synth_q.put(None)  # sentinel — always sent so player always terminates
 
     async def player():
         _ui("state", "speaking")
@@ -157,16 +162,20 @@ async def _speak_stream_pipeline(chunk_gen, voice: str) -> str:
             item = await synth_q.get()
             if item is None:
                 break  # playlist finished
+            path = None
             try:
                 path = await item  # wait for this track to be ready
+                await asyncio.to_thread(_play_mp3, path)
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
-                log.warning("Synthesis failed: %s", e)
-                continue
-            await asyncio.to_thread(_play_mp3, path)  # play; blocks until done
-            try:
-                os.unlink(path)
-            except OSError:
-                pass
+                log.warning("TTS playback error: %s", e)
+            finally:
+                if path:
+                    try:
+                        os.unlink(path)
+                    except OSError:
+                        pass
             if _stop_event.is_set():
                 # Drain and cancel any remaining queued tracks
                 while True:
