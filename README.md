@@ -1,5 +1,9 @@
 # Nyssa — Personal AI Assistant
 
+<p align="center">
+  <img src="docs/Logo.png" alt="Nyssa" width="120" />
+</p>
+
 An always-on Windows voice assistant with full PC awareness. Nyssa listens via microphone, watches the active window, and can respond by voice and execute actions on your PC. All memory stays local; only conversation content and any screenshots you trigger are sent to the AI backend.
 
 ## Features
