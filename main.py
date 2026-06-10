@@ -1,8 +1,14 @@
 import asyncio
 import logging
+import os
 import sys
 import threading
 from pathlib import Path
+
+# Suppress Qt's benign DPI-awareness warning on Windows.
+# Python sets process DPI awareness before Qt can, so Qt's attempt to set it
+# gets ERROR_ACCESS_DENIED — harmless, but noisy.
+os.environ.setdefault("QT_LOGGING_RULES", "qt.qpa.window.warning=false")
 
 from core.event_bus import EventBus
 from core.settings import load_settings
