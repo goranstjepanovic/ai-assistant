@@ -1,17 +1,18 @@
 {
   "assistant_name": "Nyssa",
-  "wake_word": "hey",
-  "hotkey": "space",
+  "wake_word": "hey nyssa",
+  "hotkey": "ctrl+alt+space",
   "mic_device_index": null,
   "whisper_model": "small",
   "vad_threshold": 0.7,
   "tts_voice": "en-GB-SoniaNeural",
   "tts_engine": "edge-tts",
   "audio_output_device": null,
+  "symbol_image": "docs/Logo.png",
   "screen_capture_backend": "mss",
   "screenshot_resize": [
-    1280,
-    720
+    1920,
+    1080
   ],
   "screenshot_quality": 75,
   "window_poll_interval_ms": 500,

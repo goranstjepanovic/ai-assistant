@@ -34,12 +34,29 @@ def _c(rgb: tuple, alpha: int) -> QColor:
 def _load_symbol_pixmap(path: str) -> QPixmap | None:
     if not path:
         return None
-    px = QPixmap(path)
-    if px.isNull():
-        import logging
-        logging.getLogger(__name__).warning("Could not load symbol image: %s", path)
-        return None
-    return px
+    import logging
+    try:
+        from PIL import Image, ImageOps
+        import io
+        img = Image.open(path).convert("RGBA")
+        # Build alpha from inverse luminosity: dark pixels → opaque, white → transparent.
+        # This removes white backgrounds and preserves anti-aliased edges.
+        lum = img.convert("L")
+        alpha = ImageOps.invert(lum)
+        white = Image.new("RGBA", img.size, (255, 255, 255, 255))
+        white.putalpha(alpha)
+        buf = io.BytesIO()
+        white.save(buf, format="PNG")
+        px = QPixmap()
+        px.loadFromData(buf.getvalue())
+        if px.isNull():
+            logging.getLogger(__name__).warning("Could not load symbol image: %s", path)
+            return None
+        return px
+    except Exception as exc:
+        logging.getLogger(__name__).warning("Symbol image load failed (%s): %s — falling back to Qt loader", path, exc)
+        px = QPixmap(path)
+        return None if px.isNull() else px
 
 
 def _colorize(pixmap: QPixmap, size_px: int, rgb: tuple) -> QImage:
