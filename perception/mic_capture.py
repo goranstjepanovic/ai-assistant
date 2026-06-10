@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import queue
+import re
 import threading
 import time
 from typing import Optional
@@ -196,12 +197,16 @@ class MicCapture:
         if not text:
             return
 
-        log.debug("Wake word check: %r", text)
-        idx = text.find(wake)
+        # Strip punctuation so "Hey, Nyssa, ..." matches wake word "hey nyssa"
+        clean = re.sub(r"[^\w\s]", " ", text)
+        clean = re.sub(r"\s+", " ", clean).strip()
+        log.info("Wake word listener heard: %r", text)
+
+        idx = clean.find(wake)
         if idx == -1:
             return
 
-        command = text[idx + len(wake):].strip(" ,.")
+        command = clean[idx + len(wake):].strip()
         if not command:
             log.debug("Wake word detected but no command followed")
             return
