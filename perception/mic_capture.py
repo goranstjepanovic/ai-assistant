@@ -184,7 +184,7 @@ class MicCapture:
 
     # ── Always-on wake word listener ──────────────────────────────────────────
 
-    def _check_wakeword(self, audio: np.ndarray, wake: str):
+    def _check_wakeword(self, audio: np.ndarray, variants: list[str]):
         if len(audio) < SAMPLE_RATE * 0.5:
             return
         self._load_model()
@@ -197,31 +197,32 @@ class MicCapture:
         if not text:
             return
 
-        # Strip punctuation so "Hey, Nyssa, ..." matches wake word "hey nyssa"
+        # Strip punctuation so "Hey, Nyssa, ..." matches "hey nyssa"
         clean = re.sub(r"[^\w\s]", " ", text)
         clean = re.sub(r"\s+", " ", clean).strip()
         log.info("Wake word listener heard: %r", text)
 
-        idx = clean.find(wake)
-        if idx == -1:
-            return
-
-        command = clean[idx + len(wake):].strip()
-        if not command:
-            log.debug("Wake word detected but no command followed")
-            return
-
-        log.info("Wake word: command = %r", command)
-        event = SpeechEvent(
-            text=command,
-            timestamp=time.time(),
-            confidence=0.8,
-            hotkey_triggered=False,
-        )
-        self._bus.publish_threadsafe("speech", event)
+        for wake in variants:
+            idx = clean.find(wake)
+            if idx != -1:
+                command = clean[idx + len(wake):].strip()
+                if not command:
+                    log.debug("Wake word %r detected but no command followed", wake)
+                    return
+                log.info("Wake word %r triggered: command = %r", wake, command)
+                event = SpeechEvent(
+                    text=command,
+                    timestamp=time.time(),
+                    confidence=0.8,
+                    hotkey_triggered=False,
+                )
+                self._bus.publish_threadsafe("speech", event)
+                return
 
     async def _run_wakeword_listener(self):
-        wake = self._settings.wake_word.lower().strip()
+        # Support multiple alternatives separated by | e.g. "hey nyssa|hey lisa|hey nissa"
+        raw_setting = self._settings.wake_word.lower().strip()
+        variants = [v.strip() for v in raw_setting.split("|") if v.strip()]
         chunk_size = int(SAMPLE_RATE * _WW_CHUNK_SECS)
 
         raw_q: queue.Queue = queue.Queue(maxsize=200)
@@ -238,7 +239,7 @@ class MicCapture:
             device=self._device, callback=_cb, blocksize=chunk_size,
         )
         stream.start()
-        log.info("Wake word listener active — say %r to activate", self._settings.wake_word)
+        log.info("Wake word listener active — variants: %s", variants)
 
         segment: list[np.ndarray] = []
         silence_count = 0
@@ -276,7 +277,7 @@ class MicCapture:
                             silence_count = 0
                             in_speech = False
                             asyncio.create_task(
-                                asyncio.to_thread(self._check_wakeword, audio, wake)
+                                asyncio.to_thread(self._check_wakeword, audio, variants)
                             )
         finally:
             stream.stop()
