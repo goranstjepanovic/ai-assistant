@@ -32,7 +32,7 @@ def setup_logging(level: str, log_dir: str):
     )
 
 
-async def _backend(settings, ui_queue):
+async def _backend(settings, ui_queue, mute_flag: threading.Event):
     log = logging.getLogger("nyssa")
     bus = EventBus()
     loop = asyncio.get_running_loop()
@@ -42,7 +42,7 @@ async def _backend(settings, ui_queue):
         tts_module.set_ui_queue(ui_queue)
 
     window_monitor = WindowMonitor(bus, settings.window_poll_interval_ms)
-    mic_capture = MicCapture(bus, settings, ui_queue)
+    mic_capture = MicCapture(bus, settings, ui_queue, mute_flag=mute_flag)
     orchestrator = Orchestrator(bus, window_monitor, settings)
 
     try:
@@ -67,6 +67,8 @@ if __name__ == "__main__":
     log.info("Hotkey: %s (push-to-talk)", settings.hotkey.upper())
     log.info("=" * 60)
 
+    mute_flag = threading.Event()
+
     try:
         import queue as _queue
         from PyQt6.QtWidgets import QApplication
@@ -77,18 +79,22 @@ if __name__ == "__main__":
         # Asyncio backend in a daemon thread so it dies when Qt exits
         threading.Thread(
             target=asyncio.run,
-            args=(_backend(settings, ui_queue),),
+            args=(_backend(settings, ui_queue, mute_flag),),
             daemon=True,
         ).start()
 
         # Qt must run on the main thread
         app = QApplication(sys.argv)
-        widget = OverlayWidget(ui_queue, symbol_path=getattr(settings, "symbol_image", ""))
+        widget = OverlayWidget(
+            ui_queue,
+            symbol_path=getattr(settings, "symbol_image", ""),
+            mute_flag=mute_flag,
+        )
         sys.exit(app.exec())
 
     except ImportError:
         log.info("PyQt6 not installed — running headless (pip install PyQt6 to enable UI)")
         try:
-            asyncio.run(_backend(settings, None))
+            asyncio.run(_backend(settings, None, mute_flag))
         except KeyboardInterrupt:
             print("\nNyssa stopped.")

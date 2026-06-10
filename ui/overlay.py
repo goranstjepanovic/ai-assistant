@@ -1,10 +1,12 @@
 import math
 import queue
+import threading
 
-from PyQt6.QtWidgets import QApplication, QWidget
+from PyQt6.QtWidgets import QApplication, QWidget, QSystemTrayIcon, QMenu
 from PyQt6.QtCore import Qt, QTimer, QPointF, QRectF
 from PyQt6.QtGui import (
     QPainter, QColor, QPixmap, QRadialGradient, QPen, QBrush, QPainterPath,
+    QIcon, QAction,
 )
 
 IDLE = "idle"
@@ -12,6 +14,7 @@ LISTENING = "listening"
 PROCESSING = "processing"
 SPEAKING = "speaking"
 FOLLOW_UP = "follow_up"
+MUTED = "muted"
 
 # Near-black warm background
 _BG = QColor(8, 4, 4, 200)
@@ -23,6 +26,7 @@ _RGB = {
     PROCESSING: (155, 20, 32),
     SPEAKING:   (220, 32, 50),
     FOLLOW_UP:  (90,  18, 28),
+    MUTED:      (35,  35, 35),
 }
 
 # Per-bar phase offsets so bars animate independently
@@ -68,10 +72,30 @@ def _load_symbol_pixmap(path: str) -> QPixmap | None:
     )
 
 
+def _make_tray_icon(muted: bool) -> QIcon:
+    px = QPixmap(22, 22)
+    px.fill(Qt.GlobalColor.transparent)
+    p = QPainter(px)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    color = QColor(80, 80, 80) if muted else QColor(205, 28, 42)
+    p.setBrush(QBrush(color))
+    p.setPen(Qt.PenStyle.NoPen)
+    p.drawEllipse(2, 2, 18, 18)
+    if muted:
+        # Draw a small diagonal line to indicate muted
+        p.setPen(QPen(QColor(180, 180, 180), 2.5,
+                      Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
+        p.drawLine(6, 6, 16, 16)
+    p.end()
+    return QIcon(px)
+
+
 class OverlayWidget(QWidget):
-    def __init__(self, ui_queue: queue.Queue, symbol_path: str = ""):
+    def __init__(self, ui_queue: queue.Queue, symbol_path: str = "",
+                 mute_flag: threading.Event | None = None):
         super().__init__()
         self._queue = ui_queue
+        self._mute_flag = mute_flag
         self._symbol_pixmap: QPixmap | None = _load_symbol_pixmap(symbol_path)
         self._state = IDLE
         self._level = 0.0
@@ -96,6 +120,64 @@ class OverlayWidget(QWidget):
         self._timer.start(33)
         self.show()
 
+        self._setup_tray()
+
+    # ── System tray ───────────────────────────────────────────────────────────
+
+    def _setup_tray(self):
+        self._tray = QSystemTrayIcon(self)
+        self._tray.setIcon(_make_tray_icon(False))
+        self._tray.setToolTip("Nyssa")
+
+        menu = QMenu()
+
+        self._vis_action = QAction("Hide Nyssa", self)
+        self._vis_action.triggered.connect(self._toggle_visibility)
+        menu.addAction(self._vis_action)
+
+        self._mute_action = QAction("Mute", self)
+        self._mute_action.triggered.connect(self._toggle_mute)
+        menu.addAction(self._mute_action)
+
+        menu.addSeparator()
+
+        quit_action = QAction("Quit", self)
+        quit_action.triggered.connect(QApplication.quit)
+        menu.addAction(quit_action)
+
+        self._tray.setContextMenu(menu)
+        self._tray.activated.connect(self._tray_activated)
+        self._tray.show()
+
+    def _tray_activated(self, reason):
+        if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
+            self._toggle_visibility()
+
+    def _toggle_visibility(self):
+        if self.isVisible():
+            self.hide()
+            self._vis_action.setText("Show Nyssa")
+        else:
+            self.show()
+            self._vis_action.setText("Hide Nyssa")
+
+    def _toggle_mute(self):
+        if self._mute_flag is None:
+            return
+        if self._mute_flag.is_set():
+            self._mute_flag.clear()
+            self._mute_action.setText("Mute")
+            self._tray.setIcon(_make_tray_icon(False))
+            self._tray.setToolTip("Nyssa")
+            self._state = IDLE
+        else:
+            self._mute_flag.set()
+            self._mute_action.setText("Unmute")
+            self._tray.setIcon(_make_tray_icon(True))
+            self._tray.setToolTip("Nyssa (Muted)")
+            self._state = MUTED
+            self._ripples = []
+
     # ── Drag ─────────────────────────────────────────────────────────────────
 
     def mousePressEvent(self, event):
@@ -116,10 +198,13 @@ class OverlayWidget(QWidget):
             try:
                 kind, value = self._queue.get_nowait()
                 if kind == "state":
-                    if value != self._state:
+                    # Don't overwrite muted state with backend signals
+                    if self._state == MUTED:
+                        pass
+                    elif value != self._state:
                         self._state = value
                         self._phase = 0.0
-                        if value != IDLE:
+                        if value not in (IDLE, MUTED):
                             self._ripples.append(0.0)
                 elif kind == "level":
                     boosted = min(1.0, float(value) * 5.0)
@@ -185,7 +270,7 @@ class OverlayWidget(QWidget):
             p.drawEllipse(QPointF(cx, cy), ring_r, ring_r)
 
         # Symbol brightness varies by state and audio level
-        if self._state == IDLE:
+        if self._state in (IDLE, MUTED):
             sym_a = int(75 + 12 * math.sin(self._phase))
         elif self._state == PROCESSING:
             sym_a = int(175 + 45 * math.sin(self._phase * 2.5))
@@ -203,7 +288,7 @@ class OverlayWidget(QWidget):
             start = int((self._phase * 180.0 / math.pi * 16) % (360 * 16))
             p.drawArc(rect, start, int(210 * 16))
 
-        # Waveform bars for listening / speaking (not during follow-up idle)
+        # Waveform bars for listening / speaking (not during follow-up or muted)
         if self._state in (LISTENING, SPEAKING):
             self._draw_bars(p, cx, cy + outer * 0.45, outer, rgb)
 

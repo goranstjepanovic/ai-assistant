@@ -41,7 +41,8 @@ def _parse_hotkey(hotkey_str: str) -> tuple[list[str], str]:
 
 
 class MicCapture:
-    def __init__(self, bus: EventBus, settings, ui_queue: Optional[queue.Queue] = None):
+    def __init__(self, bus: EventBus, settings, ui_queue: Optional[queue.Queue] = None,
+                 mute_flag: Optional[threading.Event] = None):
         self._bus = bus
         self._settings = settings
         self._modifiers, self._trigger = _parse_hotkey(settings.hotkey.lower())
@@ -54,6 +55,7 @@ class MicCapture:
         self._stream: Optional[sd.InputStream] = None
         self._transcribing = False
         self._ui_queue = ui_queue
+        self._mute_flag = mute_flag
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._follow_up_until: float = 0.0
         self._follow_up_showing: bool = False
@@ -106,6 +108,9 @@ class MicCapture:
         self._held.add(name)
         if name == self._trigger and not self._recording:
             if all(m in self._held for m in self._modifiers):
+                if self._mute_flag and self._mute_flag.is_set():
+                    log.debug("PTT blocked — muted")
+                    return
                 log.debug("Hotkey pressed — recording")
                 self._start_recording()
 
@@ -330,8 +335,8 @@ class MicCapture:
                     continue
 
                 for chunk in drained:
-                    if self._tts_active:
-                        continue  # discard audio while Nyssa is speaking
+                    if self._tts_active or (self._mute_flag and self._mute_flag.is_set()):
+                        continue  # discard audio while TTS is playing or muted
 
                     rms = float(np.sqrt(np.mean(chunk ** 2)))
 
