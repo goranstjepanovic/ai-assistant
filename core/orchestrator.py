@@ -6,7 +6,8 @@ from core.event_bus import EventBus, SpeechEvent
 from core.gatekeeper import Gatekeeper
 from ai.ollama_client import OllamaClient
 from ai.prompts import build_system_prompt
-from actions.action_runner import dispatch
+from actions.action_runner import ActionRunner
+from actions import shell as _shell
 from actions import tts
 from memory.memory_manager import MemoryManager
 from memory.fact_extractor import extract_and_store
@@ -23,6 +24,7 @@ class Orchestrator:
         self._gatekeeper = Gatekeeper(settings.activation_cooldown_s)
         self._claude = OllamaClient(settings)
         self._memory = MemoryManager(settings.memory_db_path, settings.memory_chroma_path)
+        self._action_runner = ActionRunner(memory=self._memory, settings=settings)
         self._queue: asyncio.Queue = asyncio.Queue()
         bus.subscribe("speech", self._queue)
 
@@ -34,6 +36,11 @@ class Orchestrator:
             asyncio.create_task(self._handle(event))
 
     async def _handle(self, event: SpeechEvent):
+        # Confirmation responses go directly to the shell module, skip normal flow
+        if _shell.pending():
+            await _shell.respond(event.text)
+            return
+
         window = self._window_monitor.current
         decision = self._gatekeeper.evaluate(event, window)
         if not decision.pass_event:
@@ -71,7 +78,7 @@ class Orchestrator:
         timeout = self._settings.api_timeout_s
         try:
             response = await asyncio.wait_for(
-                self._claude.complete(messages, system, dispatch),
+                self._claude.complete(messages, system, self._action_runner.dispatch),
                 timeout=timeout,
             )
         except asyncio.TimeoutError:

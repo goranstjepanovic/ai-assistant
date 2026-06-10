@@ -39,6 +39,31 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "run_shell",
+            "description": (
+                "Run a shell command and return its output. "
+                "ALWAYS requires the user to say 'yes' to confirm before executing. "
+                "Use for tasks like running scripts, opening files via CLI, or system operations."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "command": {
+                        "type": "string",
+                        "description": "The shell command to run",
+                    },
+                    "working_dir": {
+                        "type": "string",
+                        "description": "Working directory, defaults to home (~)",
+                    },
+                },
+                "required": ["command"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "type_text",
             "description": "Type text into the currently active window as if typed on the keyboard.",
             "parameters": {
