@@ -39,6 +39,60 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "open_url",
+            "description": "Open a URL in the default browser.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string", "description": "Full URL to open"},
+                },
+                "required": ["url"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "read_clipboard",
+            "description": "Read and return the current clipboard text content.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "write_clipboard",
+            "description": "Write text to the clipboard.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string", "description": "Text to copy"},
+                },
+                "required": ["text"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "remember_fact",
+            "description": (
+                "Store a persistent fact or preference about the user for future reference. "
+                "Use a short snake_case key, e.g. 'preferred_browser', 'user_name'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "key": {"type": "string", "description": "Short identifier"},
+                    "value": {"type": "string", "description": "The value to store"},
+                },
+                "required": ["key", "value"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "run_shell",
             "description": (
                 "Run a shell command and return its output. "
