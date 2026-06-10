@@ -9,6 +9,7 @@ faster-whisper>=1.0.0
 sounddevice>=0.4.6
 numpy>=1.26.0
 pywin32>=306
+pycaw>=20181226
 pynput>=1.7.6
 pyautogui>=0.9.54
 pygetwindow>=0.0.9

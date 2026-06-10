@@ -15,6 +15,7 @@ from core.settings import load_settings
 from core.orchestrator import Orchestrator
 from perception.window_monitor import WindowMonitor
 from perception.mic_capture import MicCapture
+from perception import audio_monitor
 from actions import tts as tts_module
 
 
@@ -67,6 +68,7 @@ if __name__ == "__main__":
     log.info("Hotkey: %s (push-to-talk)", settings.hotkey.upper())
     log.info("=" * 60)
 
+    audio_monitor.start(getattr(settings, "system_audio_suppress_threshold", 0.6))
     mute_flag = threading.Event()
 
     try:
