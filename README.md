@@ -13,7 +13,7 @@ An always-on Windows voice assistant with full PC awareness. Nyssa listens via m
 - **Screen-aware** — captures a screenshot when context requires it (gaming, "look at this", etc.)
 - **Persistent local memory** — remembers facts and past conversations across sessions (SQLite + ChromaDB)
 - **PC actions** — types text, presses keys, clicks, runs shell commands (with confirmation), opens URLs
-- **Dual AI backends** — Claude API (default) or local Ollama
+- **Local AI** — runs entirely on-device via [Ollama](https://ollama.com/); no API keys or cloud calls
 - **Game-aware** — suppresses accidental activations when a game is in focus
 - **Optional overlay UI** — transparent PyQt6 HUD showing assistant state
 
@@ -21,7 +21,7 @@ An always-on Windows voice assistant with full PC awareness. Nyssa listens via m
 
 - Windows 11
 - Python 3.11+
-- An [Anthropic API key](https://console.anthropic.com/) (or a local [Ollama](https://ollama.com/) instance)
+- [Ollama](https://ollama.com/) running locally with a model pulled (e.g. `ollama pull gemma4`)
 
 ## Installation
 
@@ -39,13 +39,7 @@ pip install PyQt6>=6.6.0
 
 ## Configuration
 
-Set your API key as an environment variable:
-
-```powershell
-$env:ANTHROPIC_API_KEY = "sk-ant-..."
-```
-
-All other settings are in `config/settings.json` (created with defaults on first run). Key options:
+All settings are in `config/settings.json` (created with defaults on first run). Key options:
 
 | Setting | Default | Description |
 |---|---|---|
@@ -102,7 +96,6 @@ ai-assistant/
 ## Notes
 
 - Keypress injection into online competitive games is out of scope and not supported.
-- The `ANTHROPIC_API_KEY` is read from the environment only — never stored in config files.
 - Logs are written to `logs/nyssa.log`.
 
 ## License
