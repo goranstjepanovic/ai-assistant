@@ -1,17 +1,13 @@
 import io
 import logging
 
+import mss
+from PIL import Image
+
 log = logging.getLogger(__name__)
 
 
 def capture_now(resize: tuple[int, int] = (1280, 720), quality: int = 75) -> bytes:
-    try:
-        from PIL import Image
-    except ImportError:
-        raise RuntimeError("Pillow is required for screen capture: pip install Pillow")
-
-    import mss
-
     with mss.mss() as sct:
         monitor = sct.monitors[1]  # primary monitor
         raw = sct.grab(monitor)
