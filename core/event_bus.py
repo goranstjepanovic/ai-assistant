@@ -26,6 +26,16 @@ class GatekeeperDecision:
     reason: str
 
 
+@dataclass
+class TtsStartEvent:
+    pass
+
+
+@dataclass
+class FollowUpEvent:
+    duration_s: float
+
+
 class EventBus:
     def __init__(self):
         self._subscribers: dict[str, list[asyncio.Queue]] = defaultdict(list)

@@ -55,6 +55,12 @@ class MicCapture:
         self._transcribing = False
         self._ui_queue = ui_queue
         self._loop: Optional[asyncio.AbstractEventLoop] = None
+        self._follow_up_until: float = 0.0
+        self._follow_up_queue: asyncio.Queue = asyncio.Queue()
+        self._tts_start_queue: asyncio.Queue = asyncio.Queue()
+        self._tts_active: bool = False
+        bus.subscribe("follow_up", self._follow_up_queue)
+        bus.subscribe("tts_start", self._tts_start_queue)
 
     # ── Model loading ─────────────────────────────────────────────────────────
 
@@ -228,6 +234,27 @@ class MicCapture:
                         )
                 return
 
+    def _transcribe_and_dispatch(self, audio: np.ndarray):
+        """Transcribe and dispatch during a follow-up window (no wake word required)."""
+        if len(audio) < SAMPLE_RATE * MIN_AUDIO_SECONDS:
+            return
+        self._load_model()
+        with self._model_lock:
+            segments, info = self._model.transcribe(
+                audio, language="en", beam_size=5, vad_filter=True,
+            )
+            text = " ".join(s.text for s in segments).strip()
+        if not text:
+            return
+        log.info("Follow-up heard: %r", text)
+        event = SpeechEvent(
+            text=text,
+            timestamp=time.time(),
+            confidence=info.language_probability,
+            hotkey_triggered=False,
+        )
+        self._bus.publish_threadsafe("speech", event)
+
     async def _run_wakeword_listener(self):
         # Support multiple alternatives separated by | e.g. "hey nyssa|hey lisa|hey nissa"
         raw_setting = self._settings.wake_word.lower().strip()
@@ -264,11 +291,40 @@ class MicCapture:
                     except queue.Empty:
                         break
 
+                # Suppress mic while TTS is playing
+                while True:
+                    try:
+                        self._tts_start_queue.get_nowait()
+                        self._tts_active = True
+                        segment = []
+                        silence_count = 0
+                        in_speech = False
+                        log.debug("TTS started — mic suppressed")
+                    except asyncio.QueueEmpty:
+                        break
+
+                # Drain follow-up events (also clears TTS suppression)
+                while True:
+                    try:
+                        fu = self._follow_up_queue.get_nowait()
+                        self._tts_active = False
+                        if fu.duration_s > 0:
+                            self._follow_up_until = time.monotonic() + fu.duration_s
+                            log.info("Follow-up window opened for %.0fs", fu.duration_s)
+                            self._ui("state", "follow_up")
+                        else:
+                            log.debug("TTS ended — mic restored")
+                    except asyncio.QueueEmpty:
+                        break
+
                 if not drained:
                     await asyncio.sleep(_WW_CHUNK_SECS)
                     continue
 
                 for chunk in drained:
+                    if self._tts_active:
+                        continue  # discard audio while Nyssa is speaking
+
                     rms = float(np.sqrt(np.mean(chunk ** 2)))
 
                     if rms >= _WW_SPEECH_RMS:
@@ -285,9 +341,15 @@ class MicCapture:
                             segment = []
                             silence_count = 0
                             in_speech = False
-                            asyncio.create_task(
-                                asyncio.to_thread(self._check_wakeword, audio, variants)
-                            )
+                            if time.monotonic() < self._follow_up_until:
+                                log.info("Follow-up window active — skipping wake word check")
+                                asyncio.create_task(
+                                    asyncio.to_thread(self._transcribe_and_dispatch, audio)
+                                )
+                            else:
+                                asyncio.create_task(
+                                    asyncio.to_thread(self._check_wakeword, audio, variants)
+                                )
         finally:
             stream.stop()
             stream.close()

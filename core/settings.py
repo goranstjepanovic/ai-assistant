@@ -19,6 +19,7 @@ DEFAULTS = {
     "screenshot_quality": 75,
     "window_poll_interval_ms": 500,
     "activation_cooldown_s": 1.5,
+    "follow_up_window_s": 30.0,
     "system_audio_suppress_threshold": 0.6,
     "memory_recent_turns": 10,
     "memory_semantic_k": 5,

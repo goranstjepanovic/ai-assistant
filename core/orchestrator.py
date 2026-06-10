@@ -2,7 +2,7 @@ import asyncio
 import logging
 import time
 
-from core.event_bus import EventBus, SpeechEvent
+from core.event_bus import EventBus, SpeechEvent, FollowUpEvent, TtsStartEvent
 from core.gatekeeper import Gatekeeper
 from ai.ollama_client import OllamaClient
 from ai.prompts import build_system_prompt
@@ -103,4 +103,9 @@ class Orchestrator:
             extract_and_store(event.text, response, self._claude, self._memory, source=turn_id)
         )
 
-        await tts.speak(response, self._settings.tts_voice, self._settings.tts_engine)
+        follow_up_s = getattr(self._settings, "follow_up_window_s", 0.0)
+        await self._bus.publish("tts_start", TtsStartEvent())
+        try:
+            await tts.speak(response, self._settings.tts_voice, self._settings.tts_engine)
+        finally:
+            await self._bus.publish("follow_up", FollowUpEvent(duration_s=follow_up_s))
