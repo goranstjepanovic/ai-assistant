@@ -1,7 +1,7 @@
 {
   "assistant_name": "Nyssa",
   "wake_word": "hey nyssa",
-  "hotkey": "ctrl+alt+space",
+  "hotkey": "alt_r+space",
   "mic_device_index": null,
   "whisper_model": "small",
   "vad_threshold": 0.7,
